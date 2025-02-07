@@ -1,11 +1,37 @@
+/*
+***Electrooxidizer Version 2 Firmware Alpha 0.01***
+Author: Ramsey Kropp
+20240214
+
+Firmware for an ESP32-S3 (ESP32-WROOM-1 N16R8 with WiFi, BT, Dual Core, 240MHz, VRef and ADC calibration in efuse) to control the electrode voltage direction and timing applied during electrooxidative treatment of groundwater
+
+NOTE: Requires "platform = https://github.com/pioarduino/platform-espressif32/releases/download/51.03.07/platform-espressif32.zip" in the platformio.ini file to utilize the latest version of the ESP-Arduino framework
+
+NOTE: Search for "TK" to find important notes and tasks to complete.
+
+Uses a filtered PWM to control the output voltage of an RSP1000-24 DC power supply
+Uses a full H-Bridgeto control the direction of the output voltage, switching directions between forward and reverse based on user defined timing.
+
+Software To Do (TK):
+  1: Implement a local web page and/or MQTT to
+    a: Allow a user to adjust Forward and Reverse voltage
+    b: Allow a user to adjust Forward and Reverse treatment times
+    c: Show/log the current setpoints and operational values (Output voltage and current)
+    d: Allow user enrollment and access control
+  2: Implement output current measurement (ADC read of GPIO 2, still needs calibration after changing current sense resistor! TK)
+    a: Average output over long term operation
+    b: Peak output current during first few milliseconds after changing voltage direction
+  6: Implement PID control to automatically adjust PWM duty cycle to match output voltage set-points
+*/
+
 #include <Arduino.h>
 #include <WiFi.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include "LittleFS.h"
-#include <ArduinoJson.h>
+#include <Arduino_Json.h>
 
-//Adding a comment to see if this lets me upload to git
+// TK get rid of hard coded security information before release!
 
 // Replace with your network credentials
 const char *ssid = "ExcitonClean";
@@ -19,9 +45,26 @@ AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
 
 String message = "";
-String sliderValue1 = "0";
-String sliderValue2 = "0";
-String sliderValue3 = "0";
+String sliderValue1 = "0"; // Slider1 holds target voltage 10.0<TargetVolts<26.0 0.1V resolution
+String sliderValue2 = "0"; // Slider2 sets the reversal time
+// String sliderValue3 = "0"; //Currently unused
+
+int dutyCycle1;
+int dutyCycle2;
+
+//Json Variable to Hold Slider Values
+JSONVar sliderValues;
+
+//Get Slider Values
+String getSliderValues(){
+  sliderValues["sliderValue1"] = String(sliderValue1);
+  sliderValues["sliderValue2"] = String(sliderValue2);
+  sliderValues["sliderValue3"] = String(sliderValue3);
+
+  String jsonString = JSON.stringify(sliderValues);
+  return jsonString;
+}
+
 
 // Define some GPIO connections between ESP32-S3 and DRV8706H-Q1
 const uint8_t VoltControl_PWM_Pin = 8; // GPIO 8 PWM Output will adjust 24V power supply output, PWM Setting=TargetVolts/TargetVoltsConversionFactor
@@ -59,16 +102,16 @@ bool nFault;
 bool isRunning = false;
 
 // RSP-1000-24 Control Variables
-const uint8_t outputBits = 10;  // 10 bit PWM resolution
-const uint16_t PWMFreq = 25000; // 25kHz PWM Frequency
-uint16_t VoltControl_PWM = 300; // PWM Setting=TargetVolts/TargetVoltsConversionFactor, Values outside range of 340 to 900 cause 24V supply fault conditions
+const uint8_t outputBits = 16;    // 10 bit PWM resolution
+const uint16_t PWMFreq = 25000;   // 25kHz PWM Frequency
+uint32_t VoltControl_PWM = 22300; // PWM Setting=TargetVolts/TargetVoltsConversionFactor, Values outside range of 340 to 900 cause 24V supply fault conditions
 float TargetVolts = 18.0;
 
 // Variables used for timing
 uint32_t currentTime = 0;       // Store the current time in uS
-uint32_t currentTimeMillis = 0; //Store the current time in mS
+uint32_t currentTimeMillis = 0; // Store the current time in mS
 uint32_t runstartTime = 0;      // Store the start time
-uint32_t runTime = 3600000*4;  // mS time to run the system after button press.
+uint32_t runTime = 3600000 * 4; // mS time to run the system after button press.
 uint32_t reversestartTime = 0;  // Store the reversal cycle start time
 uint32_t reverseTime = 40000;   // uS time between reversals
 uint32_t samplingstartTime = 0; // Store the sampling start time
@@ -80,11 +123,142 @@ float switchingoutputCurrent = 0.0; // output current measured immediately after
 uint16_t SO_ADC;                    // raw, unscaled current output reading
 
 // Some other constants
-const float TargetVoltsConversionFactor = 0.0301686; // Slope Value from calibration 16Jan2025
+const float TargetVoltsConversionFactor = 4.71384467856151E-4; // Slope Value from calibration 16Jan2025 converted from 12 to 16 bit
 
 bool testAttach = false; // Did the forward pwm pin successfully attach?
 
 // put function declarations here:
+
+// Initialize WiFi
+void initWiFi() {
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to WiFi ..");
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print('.');
+    delay(1000);
+  }
+  Serial.println(WiFi.localIP());
+}
+
+void notifyClients(String sliderValues) {
+  ws.textAll(sliderValues);
+}
+
+void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
+  AwsFrameInfo *info = (AwsFrameInfo*)arg;
+  if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
+    data[len] = 0;
+    message = (char*)data;
+    if (message.indexOf("1s") >= 0) {
+      sliderValue1 = message.substring(2);
+      dutyCycle1 = map(sliderValue1.toInt(), 0, 100, 0, 255);
+      Serial.println(dutyCycle1);
+      Serial.print(getSliderValues());
+      notifyClients(getSliderValues());
+    }
+    if (message.indexOf("2s") >= 0) {
+      sliderValue2 = message.substring(2);
+      dutyCycle2 = map(sliderValue2.toInt(), 0, 100, 0, 255);
+      Serial.println(dutyCycle2);
+      Serial.print(getSliderValues());
+      notifyClients(getSliderValues());
+    }    
+    if (message.indexOf("3s") >= 0) {
+      sliderValue3 = message.substring(2);
+      dutyCycle3 = map(sliderValue3.toInt(), 0, 100, 0, 255);
+      Serial.println(dutyCycle3);
+      Serial.print(getSliderValues());
+      notifyClients(getSliderValues());
+    }
+    if (strcmp((char*)data, "getValues") == 0) {
+      notifyClients(getSliderValues());
+    }
+  }
+}
+void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
+  switch (type) {
+    case WS_EVT_CONNECT:
+      Serial.printf("WebSocket client #%u connected from %s\n", client->id(), client->remoteIP().toString().c_str());
+      break;
+    case WS_EVT_DISCONNECT:
+      Serial.printf("WebSocket client #%u disconnected\n", client->id());
+      break;
+    case WS_EVT_DATA:
+      handleWebSocketMessage(arg, data, len);
+      break;
+    case WS_EVT_PONG:
+    case WS_EVT_ERROR:
+      break;
+  }
+}
+
+void initWebSocket() {
+  ws.onEvent(onEvent);
+  server.addHandler(&ws);
+}
+
+void notifyClients()
+{
+  ws.textAll(String(isRunning));
+}
+
+void handleWebSocketMessage(void *arg, uint8_t *data, size_t len)
+{
+  AwsFrameInfo *info = (AwsFrameInfo *)arg;
+  if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT)
+  {
+    data[len] = 0;
+    if (strcmp((char *)data, "toggle") == 0)
+    {
+      isRunning = !isRunning;
+      notifyClients();
+    }
+  }
+}
+
+void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type,
+             void *arg, uint8_t *data, size_t len)
+{
+  switch (type)
+  {
+  case WS_EVT_CONNECT:
+    Serial.printf("WebSocket client #%u connected from %s\n", client->id(), client->remoteIP().toString().c_str());
+    break;
+  case WS_EVT_DISCONNECT:
+    Serial.printf("WebSocket client #%u disconnected\n", client->id());
+    break;
+  case WS_EVT_DATA:
+    handleWebSocketMessage(arg, data, len);
+    break;
+  case WS_EVT_PONG:
+  case WS_EVT_ERROR:
+    break;
+  }
+}
+
+void initWebSocket()
+{
+  ws.onEvent(onEvent);
+  server.addHandler(&ws);
+}
+
+String processor(const String &var)
+{
+  Serial.println(var);
+  if (var == "STATE")
+  {
+    if (isRunning)
+    {
+      return "ON";
+    }
+    else
+    {
+      return "OFF";
+    }
+  }
+  return String();
+}
 
 void setup() // Runs once after reset
 {
@@ -135,17 +309,36 @@ void setup() // Runs once after reset
 
   digitalWrite(DRVOffPin, LOW); // Enable outputs but don't activate them
   Serial.println("DRV8706 Output Enabled! Outputs off...");
-  rgbLedWrite(48, 23, 23, 23);  // White for 1 second to show that DRV8706 outputs are enabled
+  rgbLedWrite(48, 23, 23, 23); // White for 1 second to show that DRV8706 outputs are enabled
   delay(100);
 
   rgbLedWrite(RGBLedPin, 0, 0, 0); // LED off when setup completed
+
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    delay(1000);
+    Serial.println("Connecting to WiFi..");
+  }
+
+  // Print ESP Local IP Address
+  Serial.println(WiFi.localIP());
+
+  initWebSocket();
+
+  // Route for root / web page
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
+            { request->send_P(200, "text/html", index_html, processor); });
+
+  // Start server
+  server.begin();
 }
 
 void loop()
 {
-
+  ws.cleanupClients();
   currentTime = micros();
-  currentTimeMillis = millis(); 
+  currentTimeMillis = millis();
 
   if (digitalRead(testButton) == LOW) // Watch for the button press, then wake the DRV8706, enable the outputs, then drive the output
   {
@@ -160,7 +353,7 @@ void loop()
     reversestartTime = currentTime;
     samplingstartTime = currentTime; // Add a small 17uS offset to sampling start time to prevent interference with other operations
     isRunning = true;
-    delay(100); //Need to implement a more robust solution for user holding the button down.
+    delay(100); // Need to implement a more robust solution for user holding the button down.
   }
 
   if (currentTimeMillis - runstartTime >= runTime) // Turn off the output after the run is over

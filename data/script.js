@@ -1,4 +1,8 @@
-// Complete project details: https://randomnerdtutorials.com/esp32-web-server-websocket-sliders/
+/* Initialize WebSocket Connection when the web interface is fully loaded in a browser
+Handles data exchange between HTML and firmware
+
+Adapted From: https://randomnerdtutorials.com/esp32-web-server-websocket-sliders
+And From: https://randomnerdtutorials.com/esp32-web-server-websocket-sliders/ */
 
 var gateway = `ws://${window.location.hostname}/ws`;
 var websocket;
@@ -6,6 +10,7 @@ window.addEventListener('load', onload);
 
 function onload(event) {
     initWebSocket();
+    initButton();
 }
 
 function getValues(){
@@ -42,10 +47,24 @@ function onMessage(event) {
     console.log(event.data);
     var myObj = JSON.parse(event.data);
     var keys = Object.keys(myObj);
-
+    var state;
+    if (event.data == "1"){
+        state = "ON";
+      }
+      else{
+        state = "OFF";
+      }
     for (var i = 0; i < keys.length; i++){
         var key = keys[i];
         document.getElementById(key).innerHTML = myObj[key];
         document.getElementById("slider"+ (i+1).toString()).value = myObj[key];
     }
 }
+
+function initButton() {
+    document.getElementById('button').addEventListener('click', toggle);
+  }
+
+  function toggle(){
+    websocket.send('toggle');
+  }
