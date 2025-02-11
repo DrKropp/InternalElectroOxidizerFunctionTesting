@@ -25,45 +25,47 @@ Software To Do (TK):
 */
 
 #include <Arduino.h>
-#include <WiFi.h>
-#include <AsyncTCP.h>
+//#include <WiFi.h>
+/* #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include "LittleFS.h"
-#include <Arduino_Json.h>
+#include <ArduinoJson.h> */
 
 // TK get rid of hard coded security information before release!
+//TK use the ESP32 as a wifi access point local network with secure login credentials. User access control?
 
-// Replace with your network credentials
+/* // Replace with your network credentials
 const char *ssid = "ExcitonClean";
 const char *password = "sunnycarrot023";
 const char *hostname = "ESP32S3WebServer";
 
 // Create AsyncWebServer object on port 80
-AsyncWebServer server(80);
+AsyncWebServer server(80); //TK Change to port 443 for secure network
 // Create a WebSocket object
 
 AsyncWebSocket ws("/ws");
 
 String message = "";
-String sliderValue1 = "0"; // Slider1 holds target voltage 10.0<TargetVolts<26.0 0.1V resolution
-String sliderValue2 = "0"; // Slider2 sets the reversal time
-// String sliderValue3 = "0"; //Currently unused
-
-int dutyCycle1;
-int dutyCycle2;
+String runState = "FALSE";
+String targetVolts = "0.0"; // targetVolts holds target voltage 10.0<TargetVolts<26.0 0.1V resolution
+String reverseTime = "0"; // reverseTime sets the reversal time in mS
 
 //Json Variable to Hold Slider Values
-JSONVar sliderValues;
+JsonDocument controlValues;
 
 //Get Slider Values
-String getSliderValues(){
-  sliderValues["sliderValue1"] = String(sliderValue1);
-  sliderValues["sliderValue2"] = String(sliderValue2);
-  sliderValues["sliderValue3"] = String(sliderValue3);
+String getrunValues(){
+ 
+controlValues["runState"] = "FALSE";
+controlValues["targetVolts"] = 14.0;
+controlValues["reverseTime"] = 40;
 
-  String jsonString = JSON.stringify(sliderValues);
-  return jsonString;
-}
+String output;
+
+getrunValues.shrinkToFit();  // optional
+
+serializeJson(getrunValues, output);
+} */
 
 
 // Define some GPIO connections between ESP32-S3 and DRV8706H-Q1
@@ -102,10 +104,10 @@ bool nFault;
 bool isRunning = false;
 
 // RSP-1000-24 Control Variables
-const uint8_t outputBits = 16;    // 10 bit PWM resolution
+const uint8_t outputBits = 10;    // 10 bit PWM resolution
 const uint16_t PWMFreq = 25000;   // 25kHz PWM Frequency
-uint32_t VoltControl_PWM = 22300; // PWM Setting=TargetVolts/TargetVoltsConversionFactor, Values outside range of 340 to 900 cause 24V supply fault conditions
-float TargetVolts = 18.0;
+uint32_t VoltControl_PWM = 350; // PWM Setting=TargetVolts/TargetVoltsConversionFactor, Values outside range of 300 to 900 cause 24V supply fault conditions
+float TargetVolts = 22.0;
 
 // Variables used for timing
 uint32_t currentTime = 0;       // Store the current time in uS
@@ -123,13 +125,13 @@ float switchingoutputCurrent = 0.0; // output current measured immediately after
 uint16_t SO_ADC;                    // raw, unscaled current output reading
 
 // Some other constants
-const float TargetVoltsConversionFactor = 4.71384467856151E-4; // Slope Value from calibration 16Jan2025 converted from 12 to 16 bit
+const float TargetVoltsConversionFactor = 0.0301686059427937; // Slope Value from calibration 16Jan2025
 
 bool testAttach = false; // Did the forward pwm pin successfully attach?
 
 // put function declarations here:
 
-// Initialize WiFi
+/* // Initialize WiFi
 void initWiFi() {
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
@@ -139,6 +141,16 @@ void initWiFi() {
     delay(1000);
   }
   Serial.println(WiFi.localIP());
+} */
+
+ // Initialize LittleFS
+/*void initFS() {
+  if (!LittleFS.begin()) {
+    Serial.println("An error has occurred while mounting LittleFS");
+  }
+  else{
+   Serial.println("LittleFS mounted successfully");
+  }
 }
 
 void notifyClients(String sliderValues) {
@@ -164,13 +176,13 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
       Serial.print(getSliderValues());
       notifyClients(getSliderValues());
     }    
-    if (message.indexOf("3s") >= 0) {
+    /* if (message.indexOf("3s") >= 0) {
       sliderValue3 = message.substring(2);
       dutyCycle3 = map(sliderValue3.toInt(), 0, 100, 0, 255);
       Serial.println(dutyCycle3);
       Serial.print(getSliderValues());
       notifyClients(getSliderValues());
-    }
+    } 
     if (strcmp((char*)data, "getValues") == 0) {
       notifyClients(getSliderValues());
     }
@@ -203,46 +215,6 @@ void notifyClients()
   ws.textAll(String(isRunning));
 }
 
-void handleWebSocketMessage(void *arg, uint8_t *data, size_t len)
-{
-  AwsFrameInfo *info = (AwsFrameInfo *)arg;
-  if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT)
-  {
-    data[len] = 0;
-    if (strcmp((char *)data, "toggle") == 0)
-    {
-      isRunning = !isRunning;
-      notifyClients();
-    }
-  }
-}
-
-void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type,
-             void *arg, uint8_t *data, size_t len)
-{
-  switch (type)
-  {
-  case WS_EVT_CONNECT:
-    Serial.printf("WebSocket client #%u connected from %s\n", client->id(), client->remoteIP().toString().c_str());
-    break;
-  case WS_EVT_DISCONNECT:
-    Serial.printf("WebSocket client #%u disconnected\n", client->id());
-    break;
-  case WS_EVT_DATA:
-    handleWebSocketMessage(arg, data, len);
-    break;
-  case WS_EVT_PONG:
-  case WS_EVT_ERROR:
-    break;
-  }
-}
-
-void initWebSocket()
-{
-  ws.onEvent(onEvent);
-  server.addHandler(&ws);
-}
-
 String processor(const String &var)
 {
   Serial.println(var);
@@ -258,27 +230,32 @@ String processor(const String &var)
     }
   }
   return String();
-}
+} */
 
 void setup() // Runs once after reset
 {
   // Initialize Serial communication
   Serial.begin(460800);
-  delay(100); // Wait for serial monitor to be ready
+  delay(5000); // Wait for serial monitor to be ready
   // Serial.println("startup OK");
   rgbLedWrite(RGBLedPin, 0, 55, 0);
 
   // Enable input and output pins
   testAttach = ledcAttach(VoltControl_PWM_Pin, PWMFreq, outputBits); // Pin 8 to output PWM and control output voltage
+  if(testAttach == false)
+  {
+    Serial.println("Error in RSP1000-24 Control");
+  }
+
+
+
+
   pinMode(outputEnablePin, OUTPUT);
   pinMode(outputDirectionPin, OUTPUT);
   pinMode(nSleepPin, OUTPUT);
   pinMode(DRVOffPin, OUTPUT);
   pinMode(nFaultPin, INPUT); // Fault indicator output pulled low to indicate fault condition, requires pullup resistor
 
-  /* analogReadResolution(12);       // ESP32-S3 has a default of 13 bits, so setting to 12 for range of 0-4095
-  analogSetAttenuation(ADC_11db); // Read up to 3.1V
-  pinMode(SO_Pin, ANALOG); */
 
   analogContinuousSetWidth(12);                                          // Set the resolution to 9-12 bits (default is 12 bits)
   analogContinuousSetAtten(ADC_11db);                                    // Optional: Set different attenaution (default is ADC_11db)
@@ -297,7 +274,7 @@ void setup() // Runs once after reset
 
   ledcWrite(VoltControl_PWM_Pin, VoltControl_PWM); // Set the RSP-1000-24 to a low but stable output voltage, about 9V
   Serial.print("RSP1000-24 Voltage Set to ");
-  Serial.print(TargetVolts);
+  Serial.print(VoltControl_PWM*TargetVoltsConversionFactor);
   Serial.println("V");
   rgbLedWrite(RGBLedPin, 0, 23, 10); // Blue to show that RSP-1000-24 voltage is being set
   delay(100);                        // wait 1 second for power supply to stabilize
@@ -314,38 +291,37 @@ void setup() // Runs once after reset
 
   rgbLedWrite(RGBLedPin, 0, 0, 0); // LED off when setup completed
 
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED)
-  {
-    delay(1000);
-    Serial.println("Connecting to WiFi..");
-  }
+/* initWiFi();
 
   // Print ESP Local IP Address
   Serial.println(WiFi.localIP());
 
+  initFS();
   initWebSocket();
 
-  // Route for root / web page
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
-            { request->send_P(200, "text/html", index_html, processor); });
+  // Web Server Root URL
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(LittleFS, "/index.html", "text/html");
+  });
+  
+  server.serveStatic("/", LittleFS, "/");
 
   // Start server
-  server.begin();
+  server.begin(); */
 }
 
 void loop()
 {
-  ws.cleanupClients();
+  //ws.cleanupClients();
   currentTime = micros();
   currentTimeMillis = millis();
 
   if (digitalRead(testButton) == LOW) // Watch for the button press, then wake the DRV8706, enable the outputs, then drive the output
   {
-
     VoltControl_PWM = round(TargetVolts / TargetVoltsConversionFactor);
     ledcWrite(VoltControl_PWM_Pin, VoltControl_PWM); // Set the RSP1000-24 output voltage to the target value
-    // Serial.println("Pumping out the POWER!");
+     Serial.print("OutputVoltage = ");
+     Serial.println(VoltControl_PWM*TargetVoltsConversionFactor);
     digitalWrite(outputEnablePin, HIGH); // Activate Outputs !Possible Danger! Should see PVDD on output!
     rgbLedWrite(48, 128, 0, 0);          // Bright red to show outputs are active
 
@@ -384,8 +360,8 @@ void loop()
         if (analogContinuousRead(&result, 0))
         {
           analogContinuousStop();  // Stop ADC Continuous conversions to have more time to process (print) the data
-          Serial.print(">SOADC:"); // Send formatted serial output to Teleplot serial data plotter
-          Serial.println(result[0].avg_read_mvolts);
+          // Serial.print(">SOADC:"); // Send formatted serial output to Teleplot serial data plotter
+          // Serial.println(result[0].avg_read_mvolts);
           analogContinuousStart(); // Start ADC conversions and wait for callback function to set adc_coversion_done flag to true
         }
         else
