@@ -25,14 +25,14 @@ Software To Do (TK):
 */
 
 #include <Arduino.h>
-//#include <WiFi.h>
+// #include <WiFi.h>
 /* #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include "LittleFS.h"
 #include <ArduinoJson.h> */
 
 // TK get rid of hard coded security information before release!
-//TK use the ESP32 as a wifi access point local network with secure login credentials. User access control?
+// TK use the ESP32 as a wifi access point local network with secure login credentials. User access control?
 
 /* // Replace with your network credentials
 const char *ssid = "ExcitonClean";
@@ -55,7 +55,7 @@ JsonDocument controlValues;
 
 //Get Slider Values
 String getrunValues(){
- 
+
 controlValues["runState"] = "FALSE";
 controlValues["targetVolts"] = 14.0;
 controlValues["reverseTime"] = 40;
@@ -66,7 +66,6 @@ getrunValues.shrinkToFit();  // optional
 
 serializeJson(getrunValues, output);
 } */
-
 
 // Define some GPIO connections between ESP32-S3 and DRV8706H-Q1
 const uint8_t VoltControl_PWM_Pin = 8; // GPIO 8 PWM Output will adjust 24V power supply output, PWM Setting=TargetVolts/TargetVoltsConversionFactor
@@ -104,16 +103,16 @@ bool nFault;
 bool isRunning = false;
 
 // RSP-1000-24 Control Variables
-const uint8_t outputBits = 10;    // 10 bit PWM resolution
-const uint16_t PWMFreq = 25000;   // 25kHz PWM Frequency
-uint32_t VoltControl_PWM = 350; // PWM Setting=TargetVolts/TargetVoltsConversionFactor, Values outside range of 300 to 900 cause 24V supply fault conditions
-float TargetVolts = 22.0;
+const uint8_t outputBits = 10;  // 10 bit PWM resolution
+const uint16_t PWMFreq = 25000; // 25kHz PWM Frequency
+uint32_t VoltControl_PWM = 350; // PWM Setting=TargetVolts/TargetVoltsConversionFactor, Values outside range of 300 to 900 (10bit) cause 24V supply fault conditions
+float TargetVolts = 18.0;
 
 // Variables used for timing
 uint32_t currentTime = 0;       // Store the current time in uS
 uint32_t currentTimeMillis = 0; // Store the current time in mS
 uint32_t runstartTime = 0;      // Store the start time
-uint32_t runTime = 3600000 * 4; // mS time to run the system after button press.
+uint32_t runTime = 3600000 * 8; // mS time to run the system after button press. Currently 8 hours
 uint32_t reversestartTime = 0;  // Store the reversal cycle start time
 uint32_t reverseTime = 40000;   // uS time between reversals
 uint32_t samplingstartTime = 0; // Store the sampling start time
@@ -143,7 +142,7 @@ void initWiFi() {
   Serial.println(WiFi.localIP());
 } */
 
- // Initialize LittleFS
+// Initialize LittleFS
 /*void initFS() {
   if (!LittleFS.begin()) {
     Serial.println("An error has occurred while mounting LittleFS");
@@ -175,14 +174,14 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
       Serial.println(dutyCycle2);
       Serial.print(getSliderValues());
       notifyClients(getSliderValues());
-    }    
+    }
     /* if (message.indexOf("3s") >= 0) {
       sliderValue3 = message.substring(2);
       dutyCycle3 = map(sliderValue3.toInt(), 0, 100, 0, 255);
       Serial.println(dutyCycle3);
       Serial.print(getSliderValues());
       notifyClients(getSliderValues());
-    } 
+    }
     if (strcmp((char*)data, "getValues") == 0) {
       notifyClients(getSliderValues());
     }
@@ -242,20 +241,16 @@ void setup() // Runs once after reset
 
   // Enable input and output pins
   testAttach = ledcAttach(VoltControl_PWM_Pin, PWMFreq, outputBits); // Pin 8 to output PWM and control output voltage
-  if(testAttach == false)
+  if (testAttach == false)
   {
     Serial.println("Error in RSP1000-24 Control");
   }
-
-
-
 
   pinMode(outputEnablePin, OUTPUT);
   pinMode(outputDirectionPin, OUTPUT);
   pinMode(nSleepPin, OUTPUT);
   pinMode(DRVOffPin, OUTPUT);
   pinMode(nFaultPin, INPUT); // Fault indicator output pulled low to indicate fault condition, requires pullup resistor
-
 
   analogContinuousSetWidth(12);                                          // Set the resolution to 9-12 bits (default is 12 bits)
   analogContinuousSetAtten(ADC_11db);                                    // Optional: Set different attenaution (default is ADC_11db)
@@ -274,7 +269,7 @@ void setup() // Runs once after reset
 
   ledcWrite(VoltControl_PWM_Pin, VoltControl_PWM); // Set the RSP-1000-24 to a low but stable output voltage, about 9V
   Serial.print("RSP1000-24 Voltage Set to ");
-  Serial.print(VoltControl_PWM*TargetVoltsConversionFactor);
+  Serial.print(VoltControl_PWM * TargetVoltsConversionFactor);
   Serial.println("V");
   rgbLedWrite(RGBLedPin, 0, 23, 10); // Blue to show that RSP-1000-24 voltage is being set
   delay(100);                        // wait 1 second for power supply to stabilize
@@ -291,45 +286,48 @@ void setup() // Runs once after reset
 
   rgbLedWrite(RGBLedPin, 0, 0, 0); // LED off when setup completed
 
-/* initWiFi();
+  /* initWiFi();
 
-  // Print ESP Local IP Address
-  Serial.println(WiFi.localIP());
+    // Print ESP Local IP Address
+    Serial.println(WiFi.localIP());
 
-  initFS();
-  initWebSocket();
+    initFS();
+    initWebSocket();
 
-  // Web Server Root URL
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(LittleFS, "/index.html", "text/html");
-  });
-  
-  server.serveStatic("/", LittleFS, "/");
+    // Web Server Root URL
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+      request->send(LittleFS, "/index.html", "text/html");
+    });
 
-  // Start server
-  server.begin(); */
+    server.serveStatic("/", LittleFS, "/");
+
+    // Start server
+    server.begin(); */
 }
 
 void loop()
 {
-  //ws.cleanupClients();
+  // ws.cleanupClients();
   currentTime = micros();
   currentTimeMillis = millis();
 
-  if (digitalRead(testButton) == LOW) // Watch for the button press, then wake the DRV8706, enable the outputs, then drive the output
+  if (isRunning == false)
   {
-    VoltControl_PWM = round(TargetVolts / TargetVoltsConversionFactor);
-    ledcWrite(VoltControl_PWM_Pin, VoltControl_PWM); // Set the RSP1000-24 output voltage to the target value
-     Serial.print("OutputVoltage = ");
-     Serial.println(VoltControl_PWM*TargetVoltsConversionFactor);
-    digitalWrite(outputEnablePin, HIGH); // Activate Outputs !Possible Danger! Should see PVDD on output!
-    rgbLedWrite(48, 128, 0, 0);          // Bright red to show outputs are active
+    if (digitalRead(testButton) == LOW) // Watch for the button press, then wake the DRV8706, enable the outputs, then drive the output
+    {
+      VoltControl_PWM = round(TargetVolts / TargetVoltsConversionFactor);
+      ledcWrite(VoltControl_PWM_Pin, VoltControl_PWM); // Set the RSP1000-24 output voltage to the target value
+      Serial.print("OutputVoltage = ");
+      Serial.println(VoltControl_PWM * TargetVoltsConversionFactor);
+      digitalWrite(outputEnablePin, HIGH); // Activate Outputs !Possible Danger! Should see PVDD on output!
+      rgbLedWrite(48, 128, 0, 0);          // Bright red to show outputs are active
 
-    runstartTime = currentTimeMillis;
-    reversestartTime = currentTime;
-    samplingstartTime = currentTime; // Add a small 17uS offset to sampling start time to prevent interference with other operations
-    isRunning = true;
-    delay(100); // Need to implement a more robust solution for user holding the button down.
+      runstartTime = currentTimeMillis;
+      reversestartTime = currentTime;
+      samplingstartTime = currentTime; // Add a small 17uS offset to sampling start time to prevent interference with other operations
+      isRunning = true;
+      delay(250); // Need to implement a more robust solution for user holding the button down.
+    }
   }
 
   if (currentTimeMillis - runstartTime >= runTime) // Turn off the output after the run is over
@@ -342,6 +340,13 @@ void loop()
 
   if (isRunning == true)
   {
+    if (digitalRead(testButton) == LOW) // Watch for another button press, disable the output
+    {
+      digitalWrite(outputEnablePin, LOW);
+      isRunning = false;
+      delay(250);
+    }
+
     if (currentTime - reversestartTime >= reverseTime) // Non-Blocking time based control loop for reversing current direction
     {
       reversestartTime = currentTime;
@@ -359,7 +364,7 @@ void loop()
         // Read data from ADC
         if (analogContinuousRead(&result, 0))
         {
-          analogContinuousStop();  // Stop ADC Continuous conversions to have more time to process (print) the data
+          analogContinuousStop(); // Stop ADC Continuous conversions to have more time to process (print) the data
           // Serial.print(">SOADC:"); // Send formatted serial output to Teleplot serial data plotter
           // Serial.println(result[0].avg_read_mvolts);
           analogContinuousStart(); // Start ADC conversions and wait for callback function to set adc_coversion_done flag to true
