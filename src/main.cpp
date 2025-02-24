@@ -25,16 +25,16 @@ Software To Do (TK):
 */
 
 #include <Arduino.h>
-// #include <WiFi.h>
-/* #include <AsyncTCP.h>
+#include <WiFi.h>
+#include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include "LittleFS.h"
-#include <ArduinoJson.h> */
+#include <ArduinoJson.h>
 
 // TK get rid of hard coded security information before release!
 // TK use the ESP32 as a wifi access point local network with secure login credentials. User access control?
 
-/* // Replace with your network credentials
+// Replace with your network credentials
 const char *ssid = "ExcitonClean";
 const char *password = "sunnycarrot023";
 const char *hostname = "ESP32S3WebServer";
@@ -65,7 +65,7 @@ String output;
 getrunValues.shrinkToFit();  // optional
 
 serializeJson(getrunValues, output);
-} */
+}
 
 // Define some GPIO connections between ESP32-S3 and DRV8706H-Q1
 const uint8_t VoltControl_PWM_Pin = 8; // GPIO 8 PWM Output will adjust 24V power supply output, PWM Setting=TargetVolts/TargetVoltsConversionFactor
