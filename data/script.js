@@ -38,9 +38,17 @@ function onClose(event) {
 function updateSliderPWM(element) {
     var sliderNumber = element.id.charAt(element.id.length-1);
     var sliderValue = document.getElementById(element.id).value;
-    document.getElementById("sliderValue"+sliderNumber).innerHTML = sliderValue;
+    document.getElementById("value"+sliderNumber).value = sliderValue;
     console.log(sliderValue);
     websocket.send(sliderNumber+"s"+sliderValue.toString());
+}
+
+function updateSlider(element){
+    var inputNumber = element.id.charAt(element.id.length-1);
+    var inputValue = document.getElementById(element.id).value;
+    document.getElementById("slider"+inputNumber).value = inputValue;
+    console.log(inputValue);
+    websocket.send(inputNumber+"s"+inputValue.toString());
 }
 
 function onMessage(event) {

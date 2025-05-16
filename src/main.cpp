@@ -48,7 +48,7 @@ AsyncWebSocket ws("/ws");
 String message = "";
 String runState = "FALSE";
 String targetVolts = "0.0"; // targetVolts holds target voltage 10.0<TargetVolts<26.0 0.1V resolution
-String reverseTime = "0"; // reverseTime sets the reversal time in mS
+String reverseTimeMS = "0"; // reverseTime sets the reversal time in mS
 
 //Json Variable to Hold Slider Values
 JsonDocument controlValues;
@@ -62,9 +62,9 @@ controlValues["reverseTime"] = 40;
 
 String output;
 
-getrunValues.shrinkToFit();  // optional
-
-serializeJson(getrunValues, output);
+controlValues.shrinkToFit();  // optional
+serializeJson(controlValues, output);
+return output;
 }
 
 // Define some GPIO connections between ESP32-S3 and DRV8706H-Q1
@@ -114,7 +114,7 @@ uint32_t currentTimeMillis = 0; // Store the current time in mS
 uint32_t runstartTime = 0;      // Store the start time
 uint32_t runTime = 3600000 * 8; // mS time to run the system after button press. Currently 8 hours
 uint32_t reversestartTime = 0;  // Store the reversal cycle start time
-uint32_t reverseTime = 40000;   // uS time between reversals
+uint32_t reverseTimeUS = 40000;   // uS time between reversals
 uint32_t samplingstartTime = 0; // Store the sampling start time
 uint32_t samplingTime = 100;    // uS between taking current measurements
 
@@ -347,7 +347,7 @@ void loop()
       delay(250);
     }
 
-    if (currentTime - reversestartTime >= reverseTime) // Non-Blocking time based control loop for reversing current direction
+    if (currentTime - reversestartTime >= reverseTimeUS) // Non-Blocking time based control loop for reversing current direction
     {
       reversestartTime = currentTime;
       outputDirection = !outputDirection;                // Reverse the output direction variable
