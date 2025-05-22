@@ -13,34 +13,52 @@
         <h1>Control Settings</h1>
     </div>
     <div class="content">
+        <div class="top-card">
+            <h2>Enable Output</h2>
+            <p class="state">Output: <span id="state">%STATE%</span></p>
+            <button id="button" class="button">Toggle</button>
+        </div>
+        <br>
         <div class="card-grid">
-            <div class="card">
-                <h2>Enable Output</h2>
-                <p class="state">Output: <span id="state">%STATE%</span></p>
-                <p><button id="button" class="button">Toggle</button></p>
-              </div>
-            <div class="card">
-                <p class="card-title">Output Voltage</p>
-                <p class="switch">
-                    <input type="range" oninput="updateSliderPWM(this)" id="slider1" min="10" max="26" step="0.1" value ="14" class="slider">
-                </p>
-                <p class="state">Output Voltage:<br> <input oninput="updateSlider(this)" type="number" id="value1" min="10" max="26" step="0.1" value="14" dir="ltr">Volts;</p>
+            <div class="card" onclick="selectCard(this)" id="card1">
+                <p class="card-title">Voltage</p>
+                <p class="state">Foward: +<span id="FValue1" data-min="10" data-max="26" data-step="0.1">14</span> V</p>
+                <p class="state">Reverse: -<span id="RValue1" data-min="10" data-max="26" data-step="0.1">14</span> V</p>
             </div>
-            <div class="card">
-                <p class="card-title">Reverse Time mS</p>
-                <p class="switch">
-                    <input type="range" oninput="updateSliderPWM(this)" id="slider2" min="10" max="100" step="1" value ="40" class="slider">
-                </p>
-                
-                <p class="state">Reverse Time:<br> <input type="number" oninput="updateSlider(this)"  id="value2" min="10" max="100" value="40" dir="ltr">mS;</p>
+
+            <div class="card" onclick="selectCard(this)" id="card2">
+                <p class="card-title">Timing mS</p>
+                <p class="state">Foward: +<span id="FValue2" data-min="10" data-max="100" data-step="1">40</span> mS</p>
+                <p class="state">Reverse: -<span id="RValue2" data-min="10" data-max="100" data-step="1">40</span> mS</p>
             </div>
-<!--             <div class="card">
-                <p class="card-title"> Fader 3</p>
-                <p class="switch">
-                    <input type="range" oninput="updateSliderPWM(this)" id="slider3" min="0" max="100" step="1" value ="0" class="slider">
-                </p>
-                <p class="state">Brightness: <span id="sliderValue3"></span> &percnt;</p>
-            </div> -->
+
+            <div class="card" onclick="selectCard(this)" id="card3">
+                <p class="card-title">Current</p>
+                <p class="state">Foward: +<span id="FValue3" data-min="10" data-max="26" data-step="0.1">15</span> V</p>
+                <p class="state">Reverse: -<span id="RValue3" data-min="10" data-max="26" data-step="0.1">15</span> V</p>
+            </div>
+
+            <div class="card" onclick="selectCard(this)" id="card4">
+                <p class="card-title">TEMP</p>
+                <p class="state">Foward: +<span id="FValue4" data-min="10" data-max="26" data-step="0.1">15</span> V</p>
+                <p class="state">Reverse: -<span id="RValue4" data-min="10" data-max="26" data-step="0.1">15</span> V</p>
+            </div>
+        </div>
+        <div class="update-container">
+            <p class="switch">
+                <input type="range" oninput="updateValue()" id="slider" step="0.1" class="slider">
+            </p>
+            <div class="updated-value-container">
+                <div class="tile">
+                    <p class="updated-value" id="old"><span>14</span></p>
+                    <p class="tile-title" >Old</p>
+                </div>
+                <div class="tile">
+                    <p class="updated-value" id="new"><span>14</span></p>
+                    <p class="tile-title">New</p>
+                </div>
+            </div>
+            <button id="update-button" class="button">Update Value</button>
         </div>
     </div>
     <script src="script.js"></script>

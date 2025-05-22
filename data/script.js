@@ -43,14 +43,6 @@ function updateSliderPWM(element) {
     websocket.send(sliderNumber+"s"+sliderValue.toString());
 }
 
-function updateSlider(element){
-    var inputNumber = element.id.charAt(element.id.length-1);
-    var inputValue = document.getElementById(element.id).value;
-    document.getElementById("slider"+inputNumber).value = inputValue;
-    console.log(inputValue);
-    websocket.send(inputNumber+"s"+inputValue.toString());
-}
-
 function onMessage(event) {
     console.log(event.data);
     var myObj = JSON.parse(event.data);
@@ -71,8 +63,81 @@ function onMessage(event) {
 
 function initButton() {
     document.getElementById('button').addEventListener('click', toggle);
-  }
+    document.getElementById('update-button').addEventListener('click', handleUpdate);
+}
 
   function toggle(){
     websocket.send('toggle');
   }
+
+
+  function handleUpdate() {
+    if (!selectedCard) return;
+    
+    const slider = document.getElementById("slider");
+    const newValue = parseFloat(slider.value);
+    const oldValueSpan = document.querySelector('.updated-value-container .tile:first-child span');
+    
+    document.getElementById(selectedCardState + "Value" + selectedCardId).textContent = newValue;
+    
+    //websocket.send(`${selectedCardId}${selectedCardState}${newValue}`);
+    
+    oldValueSpan.textContent = newValue;
+    selectCard(selectedCard);
+    updateSlider();
+}
+
+var selectedCard; // the acutal html element for the selected card
+var selectedCardId; // the id of the selected card: 1-4
+var selectedCardState = 'F'; // 'F' = Forward, 'R' = Reverse - 'F' is default
+
+function selectCard(element){
+    if(selectedCard == element){
+        document.getElementById(selectedCardState+"Value"+selectedCardId).classList.remove("selected");
+        if(selectedCardState == 'F'){
+            selectedCardState = 'R';
+        }
+        else{
+            selectedCardState = 'F';
+        }
+        document.getElementById(selectedCardState+"Value"+selectedCardId).classList.add("selected");
+    }
+    else{
+        if(selectedCard != null){
+            document.getElementById(selectedCardState+"Value"+selectedCardId).classList.remove("selected");
+            selectedCard.classList.remove("selected-card");
+        }
+        selectedCardState = 'F';
+        selectedCard = element;
+        selectedCardId = element.id.charAt(element.id.length-1);
+        document.getElementById(selectedCardState+"Value"+selectedCardId).classList.add("selected");
+    }
+    selectedCard.classList.add("selected-card");
+    console.log(selectedCard);
+    updateSlider();
+}
+
+function updateSlider() {
+    if(selectedCard == null) return;
+    
+    const valueElement = document.getElementById(selectedCardState + "Value" + selectedCardId);
+    const inputValue = parseFloat(valueElement.textContent);
+    const slider = document.getElementById("slider");
+    const oldValueSpan = document.querySelector('.updated-value-container .tile:first-child span');
+    const newValueSpan = document.querySelector('.updated-value-container .tile:last-child span');
+
+    // set slider values
+    slider.max = parseFloat(valueElement.getAttribute("data-max"));
+    slider.min = parseFloat(valueElement.getAttribute("data-min"));
+    slider.step = parseFloat(valueElement.getAttribute("data-step"));
+    slider.value = inputValue;
+    // update the value displays
+    oldValueSpan.textContent = inputValue;
+    newValueSpan.textContent = inputValue;
+}
+
+function updateValue() {
+    if(selectedCard == null) return;
+    const inputValue = parseFloat(document.getElementById("slider").value);
+    document.querySelector('.updated-value-container .tile:last-child span').textContent = inputValue;
+}
