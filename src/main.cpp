@@ -47,18 +47,40 @@ AsyncWebSocket ws("/ws");
 
 String message = "";
 String runState = "FALSE";
+String fowardVoltage = "14";
+String reverseVoltage = "14";
+String fowardTimingMS = "40";
+String reverseTimingMS = "40";
+String forwardCurrent = "15";
+String reverseCurrent = "15";
 String targetVolts = "0.0"; // targetVolts holds target voltage 10.0<TargetVolts<26.0 0.1V resolution
 String reverseTimeMS = "0"; // reverseTime sets the reversal time in mS
 
-//Json Variable to Hold Slider Values
+// Duty cycles
+int dutyCycle1F;
+int dutyCycle1R;
+int dutyCycle2F;
+int dutyCycle2R;
+int dutyCycle3F;
+int dutyCycle3R;
+
+
+//Json Variable to Hold Values
 JsonDocument controlValues;
 
-//Get Slider Values
-String getrunValues(){
+//Get Values
+String getValues(){
 
-controlValues["runState"] = "FALSE";
-controlValues["targetVolts"] = 14.0;
-controlValues["reverseTime"] = 40;
+//controlValues["runState"] = runState;
+// controlValues["targetVolts"] = targetVolts;
+// controlValues["reverseTime"] = reverseTimeMS;
+controlValues["fowardVoltage"] = String(fowardVoltage);
+controlValues["reverseVoltage"] = String(reverseVoltage);
+controlValues["fowardTimingMS"] = String(fowardTimingMS);
+controlValues["reverseTimingMS"] = String(reverseTimingMS);
+controlValues["forwardCurrent"] = String(forwardCurrent);
+controlValues["reverseCurrent"] = String(reverseCurrent);
+
 
 String output;
 
@@ -130,7 +152,7 @@ bool testAttach = false; // Did the forward pwm pin successfully attach?
 
 // put function declarations here:
 
-/* // Initialize WiFi
+// Initialize WiFi
 void initWiFi() {
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
@@ -140,10 +162,10 @@ void initWiFi() {
     delay(1000);
   }
   Serial.println(WiFi.localIP());
-} */
+}
 
 // Initialize LittleFS
-/*void initFS() {
+void initFS() {
   if (!LittleFS.begin()) {
     Serial.println("An error has occurred while mounting LittleFS");
   }
@@ -152,8 +174,8 @@ void initWiFi() {
   }
 }
 
-void notifyClients(String sliderValues) {
-  ws.textAll(sliderValues);
+void notifyClients(String values) {
+  ws.textAll(values);
 }
 
 void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
@@ -161,29 +183,55 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
   if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
     data[len] = 0;
     message = (char*)data;
-    if (message.indexOf("1s") >= 0) {
-      sliderValue1 = message.substring(2);
-      dutyCycle1 = map(sliderValue1.toInt(), 0, 100, 0, 255);
-      Serial.println(dutyCycle1);
-      Serial.print(getSliderValues());
-      notifyClients(getSliderValues());
+    Serial.println(message);
+    if(message.indexOf("toggleON") >= 0) {
+      Serial.println("Toggled On");
     }
-    if (message.indexOf("2s") >= 0) {
-      sliderValue2 = message.substring(2);
-      dutyCycle2 = map(sliderValue2.toInt(), 0, 100, 0, 255);
-      Serial.println(dutyCycle2);
-      Serial.print(getSliderValues());
-      notifyClients(getSliderValues());
+    if (message.indexOf("1F") >= 0) {
+      fowardVoltage = message.substring(2);
+      dutyCycle1F = map(fowardVoltage.toInt(), 0, 100, 0, 255);
+      Serial.println(dutyCycle1F);
+      //Serial.print(getValues());
+      Serial.print("Test");
+      notifyClients(getValues());
     }
-    /* if (message.indexOf("3s") >= 0) {
-      sliderValue3 = message.substring(2);
-      dutyCycle3 = map(sliderValue3.toInt(), 0, 100, 0, 255);
-      Serial.println(dutyCycle3);
-      Serial.print(getSliderValues());
-      notifyClients(getSliderValues());
+    if (message.indexOf("1R") >= 0) {
+      reverseVoltage = message.substring(2);
+      dutyCycle1R = map(reverseVoltage.toInt(), 0, 100, 0, 255);
+      Serial.println(dutyCycle1R);
+      Serial.print(getValues());
+      notifyClients(getValues());
+    }
+    if (message.indexOf("2F") >= 0) {
+      fowardTimingMS = message.substring(2);
+      dutyCycle2F = map(fowardTimingMS.toInt(), 0, 100, 0, 255);
+      Serial.println(dutyCycle2F);
+      Serial.print(getValues());
+      notifyClients(getValues());
+    }
+    if (message.indexOf("2R") >= 0) {
+      reverseTimingMS = message.substring(2);
+      dutyCycle2R = map(reverseTimingMS.toInt(), 0, 100, 0, 255);
+      Serial.println(dutyCycle2R);
+      Serial.print(getValues());
+      notifyClients(getValues());
+    }
+    if (message.indexOf("3F") >= 0) {
+      forwardCurrent = message.substring(2);
+      dutyCycle3F = map(forwardCurrent.toInt(), 0, 100, 0, 255);
+      Serial.println(dutyCycle3F);
+      Serial.print(getValues());
+      notifyClients(getValues());
+    }
+    if (message.indexOf("3R") >= 0) {
+      reverseCurrent = message.substring(2);
+      dutyCycle3R = map(reverseCurrent.toInt(), 0, 100, 0, 255);
+      Serial.println(dutyCycle3R);
+      Serial.print(getValues());
+      notifyClients(getValues());
     }
     if (strcmp((char*)data, "getValues") == 0) {
-      notifyClients(getSliderValues());
+      notifyClients(getValues());
     }
   }
 }
@@ -229,7 +277,7 @@ String processor(const String &var)
     }
   }
   return String();
-} */
+}
 
 void setup() // Runs once after reset
 {
@@ -286,7 +334,7 @@ void setup() // Runs once after reset
 
   rgbLedWrite(RGBLedPin, 0, 0, 0); // LED off when setup completed
 
-  /* initWiFi();
+  initWiFi();
 
     // Print ESP Local IP Address
     Serial.println(WiFi.localIP());
@@ -302,12 +350,12 @@ void setup() // Runs once after reset
     server.serveStatic("/", LittleFS, "/");
 
     // Start server
-    server.begin(); */
+    server.begin(); 
 }
 
 void loop()
 {
-  // ws.cleanupClients();
+  ws.cleanupClients();
   currentTime = micros();
   currentTimeMillis = millis();
 

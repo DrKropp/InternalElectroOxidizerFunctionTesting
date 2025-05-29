@@ -15,7 +15,7 @@
     <div class="content">
         <div class="top-card">
             <h2>Enable Output</h2>
-            <p class="state">Output: <span id="state">%STATE%</span></p>
+            <p class="state">Output: <span id="state">OFF</span></p>
             <button id="button" class="button">Toggle</button>
         </div>
         <br>
@@ -37,12 +37,11 @@
                 <p class="state">Foward: +<span id="FValue3" data-min="10" data-max="26" data-step="0.1">15</span> V</p>
                 <p class="state">Reverse: -<span id="RValue3" data-min="10" data-max="26" data-step="0.1">15</span> V</p>
             </div>
-
-            <div class="card" onclick="selectCard(this)" id="card4">
+            <!-- <div class="card" onclick="selectCard(this)" id="card4">
                 <p class="card-title">TEMP</p>
                 <p class="state">Foward: +<span id="FValue4" data-min="10" data-max="26" data-step="0.1">15</span> V</p>
                 <p class="state">Reverse: -<span id="RValue4" data-min="10" data-max="26" data-step="0.1">15</span> V</p>
-            </div>
+            </div> -->
         </div>
         <div class="update-container">
             <p class="switch">
@@ -54,7 +53,7 @@
                     <p class="tile-title" >Old</p>
                 </div>
                 <div class="tile">
-                    <p class="updated-value" id="new"><span>14</span></p>
+                    <p class="updated-value"><input type="number" id="new" step="0.1" value="14" oninput="syncSlider()"></p>
                     <p class="tile-title">New</p>
                 </div>
             </div>

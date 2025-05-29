@@ -6,6 +6,7 @@ And From: https://randomnerdtutorials.com/esp32-web-server-websocket-sliders/ */
 
 var gateway = `ws://${window.location.hostname}/ws`;
 var websocket;
+var isArmed = false;
 window.addEventListener('load', onload);
 
 function onload(event) {
@@ -50,15 +51,20 @@ function onMessage(event) {
     var state;
     if (event.data == "1"){
         state = "ON";
+        //document.querySelector('.top-card .state span').color = "green";
       }
       else{
         state = "OFF";
+        //document.querySelector('.top-card .state span').color = "red";
       }
-    for (var i = 0; i < keys.length; i++){
-        var key = keys[i];
-        document.getElementById(key).innerHTML = myObj[key];
-        document.getElementById("slider"+ (i+1).toString()).value = myObj[key];
-    }
+    // for (var i = 0; i < keys.length; i+2){
+    //     var key = keys[i];
+    //     var key2 = keys[i+1];
+    //     document.getElementById(key).innerHTML = myObj[key];
+    //     document.getElementById("FValue"+ (i).toString()).value = myObj[key];
+    //     document.getElementById(key2).innerHTML = myObj[key];
+    //     document.getElementById("RValue"+ (i).toString()).value = myObj[key2];
+    // }
 }
 
 function initButton() {
@@ -67,20 +73,32 @@ function initButton() {
 }
 
   function toggle(){
-    websocket.send('toggle');
+    //websocket.send('toggle');
+    if(isArmed){
+        isArmed = false;
+        document.getElementById('state').innerHTML = "OFF";
+        document.querySelector('.top-card').style.backgroundColor = "red";
+        websocket.send('toggleOFF');
+    } else {
+        isArmed = true;
+        document.getElementById('state').innerHTML = "ON";
+        document.querySelector('.top-card').style.backgroundColor = "green";
+        websocket.send('toggleON');
+    }
   }
 
 
   function handleUpdate() {
-    if (!selectedCard) return;
+    if(isArmed) alert("Cannot update while armed!");
+    if (!selectedCard || isArmed) return;
     
     const slider = document.getElementById("slider");
     const newValue = parseFloat(slider.value);
     const oldValueSpan = document.querySelector('.updated-value-container .tile:first-child span');
     
     document.getElementById(selectedCardState + "Value" + selectedCardId).textContent = newValue;
-    
-    //websocket.send(`${selectedCardId}${selectedCardState}${newValue}`);
+
+    websocket.send(selectedCardId+selectedCardState+newValue.toString());
     
     oldValueSpan.textContent = newValue;
     selectCard(selectedCard);
@@ -92,6 +110,7 @@ var selectedCardId; // the id of the selected card: 1-4
 var selectedCardState = 'F'; // 'F' = Forward, 'R' = Reverse - 'F' is default
 
 function selectCard(element){
+    if(isArmed) return;
     if(selectedCard == element){
         document.getElementById(selectedCardState+"Value"+selectedCardId).classList.remove("selected");
         if(selectedCardState == 'F'){
@@ -113,31 +132,38 @@ function selectCard(element){
         document.getElementById(selectedCardState+"Value"+selectedCardId).classList.add("selected");
     }
     selectedCard.classList.add("selected-card");
-    console.log(selectedCard);
     updateSlider();
 }
 
 function updateSlider() {
-    if(selectedCard == null) return;
+    if(selectedCard == null || isArmed) return;
     
     const valueElement = document.getElementById(selectedCardState + "Value" + selectedCardId);
     const inputValue = parseFloat(valueElement.textContent);
     const slider = document.getElementById("slider");
     const oldValueSpan = document.querySelector('.updated-value-container .tile:first-child span');
-    const newValueSpan = document.querySelector('.updated-value-container .tile:last-child span');
+    const newValueText = document.getElementById("new");
 
     // set slider values
     slider.max = parseFloat(valueElement.getAttribute("data-max"));
     slider.min = parseFloat(valueElement.getAttribute("data-min"));
     slider.step = parseFloat(valueElement.getAttribute("data-step"));
+    newValueText.step = parseFloat(valueElement.getAttribute("data-step"));
     slider.value = inputValue;
     // update the value displays
     oldValueSpan.textContent = inputValue;
-    newValueSpan.textContent = inputValue;
+    newValueText.value = inputValue;
 }
 
 function updateValue() {
-    if(selectedCard == null) return;
+    if(selectedCard == null || isArmed) return;
     const inputValue = parseFloat(document.getElementById("slider").value);
-    document.querySelector('.updated-value-container .tile:last-child span').textContent = inputValue;
+    document.getElementById("new").value = inputValue;
+}
+
+function syncSlider(){
+    if(selectedCard == null || isArmed) return;
+    const slider = document.getElementById("slider");
+    const inputValue = parseFloat(document.getElementById("new").value);
+    slider.value = inputValue;
 }
