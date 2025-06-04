@@ -30,6 +30,7 @@ Software To Do (TK):
 #include <ESPAsyncWebServer.h>
 #include "LittleFS.h"
 #include <ArduinoJson.h>
+#include <string>
 
 // TK get rid of hard coded security information before release!
 // TK use the ESP32 as a wifi access point local network with secure login credentials. User access control?
@@ -47,14 +48,14 @@ AsyncWebSocket ws("/ws");
 
 String message = "";
 String runState = "FALSE";
-String fowardVoltage = "14";
-String reverseVoltage = "14";
-String fowardTimingMS = "40";
-String reverseTimingMS = "40";
-String forwardCurrent = "15";
-String reverseCurrent = "15";
+String forwardVolts = "14";
+String reverseVolts = "14";
+String forwardTimeMS = "20";
+String reverseTimeMS = "40";
+String FValue3 = "15";
+String RValue3 = "15";
 String targetVolts = "0.0"; // targetVolts holds target voltage 10.0<TargetVolts<26.0 0.1V resolution
-String reverseTimeMS = "0"; // reverseTime sets the reversal time in mS
+//String reverseTimeMS = "0"; // reverseTime sets the reversal time in mS
 
 // Duty cycles
 int dutyCycle1F;
@@ -71,15 +72,15 @@ JsonDocument controlValues;
 //Get Values
 String getValues(){
 
-//controlValues["runState"] = runState;
+// controlValues["runState"] = runState;
 // controlValues["targetVolts"] = targetVolts;
 // controlValues["reverseTime"] = reverseTimeMS;
-controlValues["fowardVoltage"] = String(fowardVoltage);
-controlValues["reverseVoltage"] = String(reverseVoltage);
-controlValues["fowardTimingMS"] = String(fowardTimingMS);
-controlValues["reverseTimingMS"] = String(reverseTimingMS);
-controlValues["forwardCurrent"] = String(forwardCurrent);
-controlValues["reverseCurrent"] = String(reverseCurrent);
+controlValues["forwardVolts"] = String(forwardVolts);
+controlValues["reverseVolts"] = String(reverseVolts);
+controlValues["forwardTimeMS"] = String(forwardTimeMS);
+controlValues["reverseTimeMS"] = String(reverseTimeMS);
+controlValues["FValue3"] = String(FValue3);
+controlValues["RValue3"] = String(RValue3);
 
 
 String output;
@@ -122,12 +123,13 @@ bool outputDirection;
 bool nSleep;
 bool DRVOff;
 bool nFault;
-bool isRunning = false;
+bool isRunning = true;
 
 // RSP-1000-24 Control Variables
 const uint8_t outputBits = 10;  // 10 bit PWM resolution
 const uint16_t PWMFreq = 25000; // 25kHz PWM Frequency
 uint32_t VoltControl_PWM = 350; // PWM Setting=TargetVolts/TargetVoltsConversionFactor, Values outside range of 300 to 900 (10bit) cause 24V supply fault conditions
+uint32_t reverseVoltControl_PWM = 350; // PWM Setting=TargetVolts/TargetVoltsConversionFactor, Values outside range of 300 to 900 (10bit) cause 24V supply fault conditions
 float TargetVolts = 18.0;
 
 // Variables used for timing
@@ -183,49 +185,50 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
   if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
     data[len] = 0;
     message = (char*)data;
-    Serial.println(message);
-    if(message.indexOf("toggleON") >= 0) {
-      Serial.println("Toggled On");
+    //Serial.println(message);
+    if(message.indexOf("toggle") >= 0) {
+      Serial.println("Toggled state");
+      isRunning = !isRunning;
+      notifyClients(getValues());
     }
     if (message.indexOf("1F") >= 0) {
-      fowardVoltage = message.substring(2);
-      dutyCycle1F = map(fowardVoltage.toInt(), 0, 100, 0, 255);
+      forwardVolts = message.substring(2);
+      dutyCycle1F = map(forwardVolts.toInt(), 0, 100, 0, 255);
       Serial.println(dutyCycle1F);
       //Serial.print(getValues());
-      Serial.print("Test");
       notifyClients(getValues());
     }
     if (message.indexOf("1R") >= 0) {
-      reverseVoltage = message.substring(2);
-      dutyCycle1R = map(reverseVoltage.toInt(), 0, 100, 0, 255);
+      reverseVolts = message.substring(2);
+      dutyCycle1R = map(reverseVolts.toInt(), 0, 100, 0, 255);
       Serial.println(dutyCycle1R);
       Serial.print(getValues());
       notifyClients(getValues());
     }
     if (message.indexOf("2F") >= 0) {
-      fowardTimingMS = message.substring(2);
-      dutyCycle2F = map(fowardTimingMS.toInt(), 0, 100, 0, 255);
+      forwardTimeMS = message.substring(2);
+      dutyCycle2F = map(forwardTimeMS.toInt(), 0, 100, 0, 255);
       Serial.println(dutyCycle2F);
       Serial.print(getValues());
       notifyClients(getValues());
     }
     if (message.indexOf("2R") >= 0) {
-      reverseTimingMS = message.substring(2);
-      dutyCycle2R = map(reverseTimingMS.toInt(), 0, 100, 0, 255);
+      reverseTimeMS = message.substring(2);
+      dutyCycle2R = map(reverseTimeMS.toInt(), 0, 100, 0, 255);
       Serial.println(dutyCycle2R);
       Serial.print(getValues());
       notifyClients(getValues());
     }
     if (message.indexOf("3F") >= 0) {
-      forwardCurrent = message.substring(2);
-      dutyCycle3F = map(forwardCurrent.toInt(), 0, 100, 0, 255);
+      FValue3 = message.substring(2);
+      dutyCycle3F = map(FValue3.toInt(), 0, 100, 0, 255);
       Serial.println(dutyCycle3F);
       Serial.print(getValues());
       notifyClients(getValues());
     }
     if (message.indexOf("3R") >= 0) {
-      reverseCurrent = message.substring(2);
-      dutyCycle3R = map(reverseCurrent.toInt(), 0, 100, 0, 255);
+      RValue3 = message.substring(2);
+      dutyCycle3R = map(RValue3.toInt(), 0, 100, 0, 255);
       Serial.println(dutyCycle3R);
       Serial.print(getValues());
       notifyClients(getValues());
@@ -351,6 +354,10 @@ void setup() // Runs once after reset
 
     // Start server
     server.begin(); 
+
+    runstartTime = millis();
+    reversestartTime = micros();
+    samplingstartTime = micros(); // Add a small 17uS offset to sampling start time to prevent interference with other operations
 }
 
 void loop()
@@ -361,21 +368,21 @@ void loop()
 
   if (isRunning == false)
   {
-    if (digitalRead(testButton) == LOW) // Watch for the button press, then wake the DRV8706, enable the outputs, then drive the output
-    {
-      VoltControl_PWM = round(TargetVolts / TargetVoltsConversionFactor);
-      ledcWrite(VoltControl_PWM_Pin, VoltControl_PWM); // Set the RSP1000-24 output voltage to the target value
-      Serial.print("OutputVoltage = ");
-      Serial.println(VoltControl_PWM * TargetVoltsConversionFactor);
-      digitalWrite(outputEnablePin, HIGH); // Activate Outputs !Possible Danger! Should see PVDD on output!
-      rgbLedWrite(48, 128, 0, 0);          // Bright red to show outputs are active
+    rgbLedWrite(48, 0, 0, 0); // led off
+    digitalWrite(outputEnablePin, LOW); // Deactivate outputs
+    // if (digitalRead(testButton) == LOW) // Watch for the button press, then wake the DRV8706, enable the outputs, then drive the output
+    // {
+    //   VoltControl_PWM = round(TargetVolts / TargetVoltsConversionFactor);
+    //   ledcWrite(VoltControl_PWM_Pin, VoltControl_PWM); // Set the RSP1000-24 output voltage to the target value
+    //   Serial.print("OutputVoltage = ");
+    //   Serial.println(VoltControl_PWM * TargetVoltsConversionFactor);
+    //   digitalWrite(outputEnablePin, HIGH); // Activate Outputs !Possible Danger! Should see PVDD on output!
+      
 
-      runstartTime = currentTimeMillis;
-      reversestartTime = currentTime;
-      samplingstartTime = currentTime; // Add a small 17uS offset to sampling start time to prevent interference with other operations
-      isRunning = true;
-      delay(250); // Need to implement a more robust solution for user holding the button down.
-    }
+      
+    //   isRunning = true;
+    //   delay(250); // Need to implement a more robust solution for user holding the button down.
+    // }
   }
 
   if (currentTimeMillis - runstartTime >= runTime) // Turn off the output after the run is over
@@ -388,6 +395,8 @@ void loop()
 
   if (isRunning == true)
   {
+    rgbLedWrite(48, 128, 0, 0);          // Bright red to show outputs are active
+    digitalWrite(outputEnablePin, HIGH); // Activate Outputs !Possible Danger! Should see PVDD on output!
     if (digitalRead(testButton) == LOW) // Watch for another button press, disable the output
     {
       digitalWrite(outputEnablePin, LOW);
@@ -395,11 +404,24 @@ void loop()
       delay(250);
     }
 
-    if (currentTime - reversestartTime >= reverseTimeUS) // Non-Blocking time based control loop for reversing current direction
-    {
-      reversestartTime = currentTime;
-      outputDirection = !outputDirection;                // Reverse the output direction variable
-      digitalWrite(outputDirectionPin, outputDirection); // Change the output direction
+    if(outputDirection == false){ // Runs when output direction is forward
+      //VoltControl_PWM = round(forwardVolts.toFloat() / TargetVoltsConversionFactor);
+      ledcWrite(VoltControl_PWM_Pin, 350); // Set the RSP1000-24 output voltage to the target value
+      if (currentTime - reversestartTime >= forwardTimeMS.toInt() * 1000) // Non-Blocking time based control loop for reversing current direction
+      {
+        reversestartTime = currentTime;
+        outputDirection = !outputDirection;                // Reverse the output direction variable
+        digitalWrite(outputDirectionPin, outputDirection); // Change the output direction
+      }
+    } else { // Runs when output direction is reverse
+      //VoltControl_PWM = round(reverseVolts.toFloat() / TargetVoltsConversionFactor);
+      ledcWrite(VoltControl_PWM_Pin, 800); // Set the RSP1000-24 output voltage to the target value
+      if (currentTime - reversestartTime >= reverseTimeMS.toInt() * 1000) // Non-Blocking time based control loop for reversing current direction
+      {
+        reversestartTime = currentTime;
+        outputDirection = !outputDirection;                // Reverse the output direction variable
+        digitalWrite(outputDirectionPin, outputDirection); // Change the output direction
+      }
     }
 
     if (currentTime - samplingstartTime >= samplingTime)

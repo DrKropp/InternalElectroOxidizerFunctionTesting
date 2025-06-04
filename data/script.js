@@ -78,13 +78,12 @@ function initButton() {
         isArmed = false;
         document.getElementById('state').innerHTML = "OFF";
         document.querySelector('.top-card').style.backgroundColor = "red";
-        websocket.send('toggleOFF');
     } else {
         isArmed = true;
         document.getElementById('state').innerHTML = "ON";
         document.querySelector('.top-card').style.backgroundColor = "green";
-        websocket.send('toggleON');
     }
+    websocket.send('toggle');
   }
 
 
