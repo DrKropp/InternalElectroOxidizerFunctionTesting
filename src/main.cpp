@@ -48,8 +48,7 @@ AsyncWebSocket ws("/ws");
 
 String message = "";
 String runState = "FALSE";
-String forwardVolts = "14";
-String reverseVolts = "14";
+String outputVoltage = "14";
 String forwardTimeMS = "20";
 String reverseTimeMS = "40";
 String FValue3 = "15";
@@ -75,8 +74,7 @@ String getValues(){
 // controlValues["runState"] = runState;
 // controlValues["targetVolts"] = targetVolts;
 // controlValues["reverseTime"] = reverseTimeMS;
-controlValues["forwardVolts"] = String(forwardVolts);
-controlValues["reverseVolts"] = String(reverseVolts);
+controlValues["outputVoltage"] = String(outputVoltage);
 controlValues["forwardTimeMS"] = String(forwardTimeMS);
 controlValues["reverseTimeMS"] = String(reverseTimeMS);
 controlValues["FValue3"] = String(FValue3);
@@ -129,7 +127,6 @@ bool isRunning = true;
 const uint8_t outputBits = 10;  // 10 bit PWM resolution
 const uint16_t PWMFreq = 25000; // 25kHz PWM Frequency
 uint32_t VoltControl_PWM = 350; // PWM Setting=TargetVolts/TargetVoltsConversionFactor, Values outside range of 300 to 900 (10bit) cause 24V supply fault conditions
-uint32_t reverseVoltControl_PWM = 350; // PWM Setting=TargetVolts/TargetVoltsConversionFactor, Values outside range of 300 to 900 (10bit) cause 24V supply fault conditions
 float TargetVolts = 18.0;
 
 // Variables used for timing
@@ -192,17 +189,10 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
       notifyClients(getValues());
     }
     if (message.indexOf("1F") >= 0) {
-      forwardVolts = message.substring(2);
-      dutyCycle1F = map(forwardVolts.toInt(), 0, 100, 0, 255);
+      outputVoltage = message.substring(2);
+      dutyCycle1F = map(outputVoltage.toInt(), 0, 100, 0, 255);
       Serial.println(dutyCycle1F);
       //Serial.print(getValues());
-      notifyClients(getValues());
-    }
-    if (message.indexOf("1R") >= 0) {
-      reverseVolts = message.substring(2);
-      dutyCycle1R = map(reverseVolts.toInt(), 0, 100, 0, 255);
-      Serial.println(dutyCycle1R);
-      Serial.print(getValues());
       notifyClients(getValues());
     }
     if (message.indexOf("2F") >= 0) {
@@ -397,6 +387,11 @@ void loop()
   {
     rgbLedWrite(48, 128, 0, 0);          // Bright red to show outputs are active
     digitalWrite(outputEnablePin, HIGH); // Activate Outputs !Possible Danger! Should see PVDD on output!
+
+    // Get the output voltage
+    VoltControl_PWM = round(outputVoltage.toFloat() / TargetVoltsConversionFactor);
+    ledcWrite(VoltControl_PWM_Pin, VoltControl_PWM); // Set the RSP1000-24 output voltage to the target value
+
     if (digitalRead(testButton) == LOW) // Watch for another button press, disable the output
     {
       digitalWrite(outputEnablePin, LOW);
@@ -405,8 +400,6 @@ void loop()
     }
 
     if(outputDirection == false){ // Runs when output direction is forward
-      //VoltControl_PWM = round(forwardVolts.toFloat() / TargetVoltsConversionFactor);
-      ledcWrite(VoltControl_PWM_Pin, 350); // Set the RSP1000-24 output voltage to the target value
       if (currentTime - reversestartTime >= forwardTimeMS.toInt() * 1000) // Non-Blocking time based control loop for reversing current direction
       {
         reversestartTime = currentTime;
@@ -414,8 +407,6 @@ void loop()
         digitalWrite(outputDirectionPin, outputDirection); // Change the output direction
       }
     } else { // Runs when output direction is reverse
-      //VoltControl_PWM = round(reverseVolts.toFloat() / TargetVoltsConversionFactor);
-      ledcWrite(VoltControl_PWM_Pin, 800); // Set the RSP1000-24 output voltage to the target value
       if (currentTime - reversestartTime >= reverseTimeMS.toInt() * 1000) // Non-Blocking time based control loop for reversing current direction
       {
         reversestartTime = currentTime;

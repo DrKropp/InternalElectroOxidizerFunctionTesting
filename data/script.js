@@ -111,6 +111,7 @@ var selectedCardState = 'F'; // 'F' = Forward, 'R' = Reverse - 'F' is default
 function selectCard(element){
     if(isArmed) return;
     if(selectedCard == element){
+        if(selectedCard == document.getElementById('card1')) return;
         document.getElementById(selectedCardState+"Value"+selectedCardId).classList.remove("selected");
         if(selectedCardState == 'F'){
             selectedCardState = 'R';

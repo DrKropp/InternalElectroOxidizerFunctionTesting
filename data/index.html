@@ -22,10 +22,8 @@
         <div class="card-grid">
             <div class="card" onclick="selectCard(this)" id="card1">
                 <p class="card-title">Voltage</p>
-                <p class="state">Foward: +<span id="FValue1" data-min="10" data-max="26" data-step="0.1">14</span> V</p>
-                <p class="state">Reverse: -<span id="RValue1" data-min="10" data-max="26" data-step="0.1">14</span> V</p>
+                <p class="state" id="voltage"><span id="FValue1" data-min="10" data-max="26" data-step="0.1">14</span> V</p>
             </div>
-
             <div class="card" onclick="selectCard(this)" id="card2">
                 <p class="card-title">Timing mS</p>
                 <p class="state">Foward: +<span id="FValue2" data-min="10" data-max="100" data-step="1">40</span> mS</p>
@@ -36,11 +34,6 @@
                 <p class="card-title">Current</p>
                 <p class="state">Foward: +<span id="FValue3" data-min="10" data-max="26" data-step="0.1">15</span> A</p>
                 <p class="state">Reverse: -<span id="RValue3" data-min="10" data-max="26" data-step="0.1">15</span> A</p>
-            </div>
-            <div class="card" onclick="selectCard(this)" id="card4">
-                <p class="card-title">TEMP</p>
-                <p class="state">Foward: +<span id="FValue4" data-min="10" data-max="26" data-step="0.1">15</span> V</p>
-                <p class="state">Reverse: -<span id="RValue4" data-min="10" data-max="26" data-step="0.1">15</span> V</p>
             </div>
         </div>
         <div class="update-container">
