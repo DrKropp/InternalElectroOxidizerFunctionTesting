@@ -48,13 +48,15 @@ AsyncWebSocket ws("/ws");
 
 String message = "";
 String runState = "FALSE";
-String outputVoltage = "14";
-String forwardTimeMS = "20";
-String reverseTimeMS = "40";
-String FValue3 = "15";
-String RValue3 = "15";
+
+String FValue1 = "14"; // OUTPUT VOLTAGE
+String FValue2 = "20"; // FORWARD TIME
+String RValue2 = "40"; // REVERSE TIME
+String FValue3 = "15"; // FOWARD CURRENT
+String RValue3 = "15"; // REVERSE CURRENT
+
 String targetVolts = "0.0"; // targetVolts holds target voltage 10.0<TargetVolts<26.0 0.1V resolution
-//String reverseTimeMS = "0"; // reverseTime sets the reversal time in mS
+//String RValue2 = "0"; // reverseTime sets the reversal time in mS
 
 // Duty cycles
 int dutyCycle1F;
@@ -64,7 +66,6 @@ int dutyCycle2R;
 int dutyCycle3F;
 int dutyCycle3R;
 
-
 //Json Variable to Hold Values
 JsonDocument controlValues;
 
@@ -73,10 +74,10 @@ String getValues(){
 
 // controlValues["runState"] = runState;
 // controlValues["targetVolts"] = targetVolts;
-// controlValues["reverseTime"] = reverseTimeMS;
-controlValues["outputVoltage"] = String(outputVoltage);
-controlValues["forwardTimeMS"] = String(forwardTimeMS);
-controlValues["reverseTimeMS"] = String(reverseTimeMS);
+// controlValues["reverseTime"] = RValue2;
+controlValues["FValue1"] = String(FValue1);
+controlValues["FValue2"] = String(FValue2);
+controlValues["RValue2"] = String(RValue2);
 controlValues["FValue3"] = String(FValue3);
 controlValues["RValue3"] = String(RValue3);
 
@@ -189,37 +190,37 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
       notifyClients(getValues());
     }
     if (message.indexOf("1F") >= 0) {
-      outputVoltage = message.substring(2);
-      dutyCycle1F = map(outputVoltage.toInt(), 0, 100, 0, 255);
-      Serial.println(dutyCycle1F);
-      //Serial.print(getValues());
+      FValue1 = message.substring(2);
+      dutyCycle1F = map(FValue1.toInt(), 0, 100, 0, 255);
+      //Serial.println(dutyCycle1F);
+      Serial.print(getValues());
       notifyClients(getValues());
     }
     if (message.indexOf("2F") >= 0) {
-      forwardTimeMS = message.substring(2);
-      dutyCycle2F = map(forwardTimeMS.toInt(), 0, 100, 0, 255);
-      Serial.println(dutyCycle2F);
+      FValue2 = message.substring(2);
+      dutyCycle2F = map(FValue2.toInt(), 0, 100, 0, 255);
+      //Serial.println(dutyCycle2F);
       Serial.print(getValues());
       notifyClients(getValues());
     }
     if (message.indexOf("2R") >= 0) {
-      reverseTimeMS = message.substring(2);
-      dutyCycle2R = map(reverseTimeMS.toInt(), 0, 100, 0, 255);
-      Serial.println(dutyCycle2R);
+      RValue2 = message.substring(2);
+      dutyCycle2R = map(RValue2.toInt(), 0, 100, 0, 255);
+      //Serial.println(dutyCycle2R);
       Serial.print(getValues());
       notifyClients(getValues());
     }
     if (message.indexOf("3F") >= 0) {
       FValue3 = message.substring(2);
       dutyCycle3F = map(FValue3.toInt(), 0, 100, 0, 255);
-      Serial.println(dutyCycle3F);
+      //Serial.println(dutyCycle3F);
       Serial.print(getValues());
       notifyClients(getValues());
     }
     if (message.indexOf("3R") >= 0) {
       RValue3 = message.substring(2);
       dutyCycle3R = map(RValue3.toInt(), 0, 100, 0, 255);
-      Serial.println(dutyCycle3R);
+      //Serial.println(dutyCycle3R);
       Serial.print(getValues());
       notifyClients(getValues());
     }
@@ -364,7 +365,7 @@ void loop()
     // {
     //   VoltControl_PWM = round(TargetVolts / TargetVoltsConversionFactor);
     //   ledcWrite(VoltControl_PWM_Pin, VoltControl_PWM); // Set the RSP1000-24 output voltage to the target value
-    //   Serial.print("OutputVoltage = ");
+    //   Serial.print("FValue1 = ");
     //   Serial.println(VoltControl_PWM * TargetVoltsConversionFactor);
     //   digitalWrite(outputEnablePin, HIGH); // Activate Outputs !Possible Danger! Should see PVDD on output!
       
@@ -389,7 +390,7 @@ void loop()
     digitalWrite(outputEnablePin, HIGH); // Activate Outputs !Possible Danger! Should see PVDD on output!
 
     // Get the output voltage
-    VoltControl_PWM = round(outputVoltage.toFloat() / TargetVoltsConversionFactor);
+    VoltControl_PWM = round((FValue1.toFloat() - 0.3) / TargetVoltsConversionFactor); // TEMP 0.3 VALUE FOR OFFSET UNTIL NEW CALIBRATION
     ledcWrite(VoltControl_PWM_Pin, VoltControl_PWM); // Set the RSP1000-24 output voltage to the target value
 
     if (digitalRead(testButton) == LOW) // Watch for another button press, disable the output
@@ -400,14 +401,14 @@ void loop()
     }
 
     if(outputDirection == false){ // Runs when output direction is forward
-      if (currentTime - reversestartTime >= forwardTimeMS.toInt() * 1000) // Non-Blocking time based control loop for reversing current direction
+      if (currentTime - reversestartTime >= FValue2.toInt() * 1000) // Non-Blocking time based control loop for reversing current direction
       {
         reversestartTime = currentTime;
         outputDirection = !outputDirection;                // Reverse the output direction variable
         digitalWrite(outputDirectionPin, outputDirection); // Change the output direction
       }
     } else { // Runs when output direction is reverse
-      if (currentTime - reversestartTime >= reverseTimeMS.toInt() * 1000) // Non-Blocking time based control loop for reversing current direction
+      if (currentTime - reversestartTime >= RValue2.toInt() * 1000) // Non-Blocking time based control loop for reversing current direction
       {
         reversestartTime = currentTime;
         outputDirection = !outputDirection;                // Reverse the output direction variable

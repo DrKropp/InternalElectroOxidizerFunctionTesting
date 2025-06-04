@@ -57,14 +57,10 @@ function onMessage(event) {
         state = "OFF";
         //document.querySelector('.top-card .state span').color = "red";
       }
-    // for (var i = 0; i < keys.length; i+2){
-    //     var key = keys[i];
-    //     var key2 = keys[i+1];
-    //     document.getElementById(key).innerHTML = myObj[key];
-    //     document.getElementById("FValue"+ (i).toString()).value = myObj[key];
-    //     document.getElementById(key2).innerHTML = myObj[key];
-    //     document.getElementById("RValue"+ (i).toString()).value = myObj[key2];
-    // }
+    for (var i = 0; i < keys.length; i++){
+        var key = keys[i];
+        document.getElementById(key).innerHTML = myObj[key];
+    }
 }
 
 function initButton() {
