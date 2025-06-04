@@ -193,35 +193,35 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
       FValue1 = message.substring(2);
       dutyCycle1F = map(FValue1.toInt(), 0, 100, 0, 255);
       //Serial.println(dutyCycle1F);
-      Serial.print(getValues());
+      Serial.println(getValues());
       notifyClients(getValues());
     }
     if (message.indexOf("2F") >= 0) {
       FValue2 = message.substring(2);
       dutyCycle2F = map(FValue2.toInt(), 0, 100, 0, 255);
       //Serial.println(dutyCycle2F);
-      Serial.print(getValues());
+      Serial.println(getValues());
       notifyClients(getValues());
     }
     if (message.indexOf("2R") >= 0) {
       RValue2 = message.substring(2);
       dutyCycle2R = map(RValue2.toInt(), 0, 100, 0, 255);
       //Serial.println(dutyCycle2R);
-      Serial.print(getValues());
+      Serial.println(getValues());
       notifyClients(getValues());
     }
     if (message.indexOf("3F") >= 0) {
       FValue3 = message.substring(2);
       dutyCycle3F = map(FValue3.toInt(), 0, 100, 0, 255);
       //Serial.println(dutyCycle3F);
-      Serial.print(getValues());
+      Serial.println(getValues());
       notifyClients(getValues());
     }
     if (message.indexOf("3R") >= 0) {
       RValue3 = message.substring(2);
       dutyCycle3R = map(RValue3.toInt(), 0, 100, 0, 255);
       //Serial.println(dutyCycle3R);
-      Serial.print(getValues());
+      Serial.println(getValues());
       notifyClients(getValues());
     }
     if (strcmp((char*)data, "getValues") == 0) {
