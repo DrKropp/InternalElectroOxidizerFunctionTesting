@@ -31,6 +31,7 @@ Software To Do (TK):
 #include "LittleFS.h"
 #include <ArduinoJson.h>
 #include <string>
+#include <DNSServer.h>
 
 // TK get rid of hard coded security information before release!
 // TK use the ESP32 as a wifi access point local network with secure login credentials. User access control?
@@ -39,6 +40,16 @@ Software To Do (TK):
 const char *ssid = "ExcitonClean";
 const char *password = "sunnycarrot023";
 const char *hostname = "ESP32S3WebServer";
+
+// DNS server
+const byte DNS_PORT = 53;
+DNSServer dnsServer;
+
+// AP Config
+IPAddress apIP(192, 168, 4, 1);
+IPAddress netMsk(255, 255, 255, 0);
+char ap_ssid[32];
+String ap_password = "sunnycarrot023";
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80); //TK Change to port 443 for secure network
@@ -153,15 +164,43 @@ bool testAttach = false; // Did the forward pwm pin successfully attach?
 // put function declarations here:
 
 // Initialize WiFi
-void initWiFi() {
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  Serial.print("Connecting to WiFi ..");
-  while (WiFi.status() != WL_CONNECTED) {
-    Serial.print('.');
-    delay(1000);
-  }
-  Serial.println(WiFi.localIP());
+// void initWiFi() {
+//   WiFi.mode(WIFI_STA);
+//   WiFi.begin(ssid, password);
+//   Serial.print("Connecting to WiFi ..");
+//   while (WiFi.status() != WL_CONNECTED) {
+//     Serial.print('.');
+//     delay(1000);
+//   }
+//   Serial.println(WiFi.localIP());
+// }
+
+void setupAP() {
+    uint8_t mac[6];
+    WiFi.macAddress(mac);
+    snprintf(ap_ssid, sizeof(ap_ssid), "esp_%02X%02X%02X%02X%02X%02X", 
+            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+    Serial.print("Setting up AP: ");
+    Serial.println(ap_ssid);
+
+    if (!WiFi.softAPConfig(apIP, apIP, netMsk)) {
+        Serial.println("AP Config Failed");
+    }
+
+    if (!WiFi.softAP(ap_ssid, ap_password.c_str())) {
+        Serial.println("AP Setup Failed");
+    } else {
+        Serial.print("AP IP: ");
+        Serial.println(WiFi.softAPIP());
+    }
+    
+    dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
+    if (!dnsServer.start(DNS_PORT, "*", apIP)) {
+        Serial.println("DNS Server Failed");
+    } else {
+        Serial.println("DNS Server Started");
+    }
 }
 
 // Initialize LittleFS
@@ -172,6 +211,23 @@ void initFS() {
   else{
    Serial.println("LittleFS mounted successfully");
   }
+}
+
+// HELPER FUNCTIONS
+// Check if string is an IP address
+bool isIp(String str) {
+  for (size_t i = 0; i < str.length(); i++) {
+    int c = str.charAt(i);
+    if (c != '.' && (c < '0' || c > '9')) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Convert IPAddress to String
+String toStringIp(IPAddress ip) {
+  return String(ip[0]) + "." + ip[1] + "." + ip[2] + "." + ip[3];
 }
 
 void notifyClients(String values) {
@@ -328,13 +384,32 @@ void setup() // Runs once after reset
 
   rgbLedWrite(RGBLedPin, 0, 0, 0); // LED off when setup completed
 
-  initWiFi();
+  // initWiFi();
+  setupAP(); // Replace initWiFi() with this
 
     // Print ESP Local IP Address
-    Serial.println(WiFi.localIP());
+    //Serial.println(WiFi.localIP());
+    Serial.print("AP IP: ");
+    Serial.println(WiFi.softAPIP());  
 
     initFS();
     initWebSocket();
+
+    // Captive Portal Handler
+    server.onNotFound([](AsyncWebServerRequest *request){
+      Serial.printf("Request: host='%s', url='%s'\n", 
+                  request->host().c_str(), request->url().c_str());
+    
+      // Always redirect if not requesting AP IP
+      if (!isIp(request->host()) || request->host() != apIP.toString()) {
+        String redirectUrl = "http://" + apIP.toString() + "/";
+        Serial.printf("Redirecting to: %s\n", redirectUrl.c_str());
+        request->redirect(redirectUrl);
+      } else {
+        // Serve index.html for all paths under AP IP
+        request->send(LittleFS, "/index.html", "text/html");
+      }
+  });
 
     // Web Server Root URL
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -353,9 +428,19 @@ void setup() // Runs once after reset
 
 void loop()
 {
+  dnsServer.processNextRequest(); // Handle DNS queries
   ws.cleanupClients();
+
+  static unsigned long lastDnsProcess = 0;
+  if (millis() - lastDnsProcess > 10) {
+      dnsServer.processNextRequest();
+      lastDnsProcess = millis();
+  }
+
   currentTime = micros();
   currentTimeMillis = millis();
+
+
 
   if (isRunning == false)
   {
@@ -442,3 +527,4 @@ void loop()
     }
   }
 }
+
