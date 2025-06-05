@@ -37,9 +37,10 @@ Software To Do (TK):
 // TK use the ESP32 as a wifi access point local network with secure login credentials. User access control?
 
 // Replace with your network credentials
-const char *ssid = "ExcitonClean";
-const char *password = "sunnycarrot023";
+// const char *ssid = "ExcitonClean";
+// const char *password = "sunnycarrot023";
 const char *hostname = "ESP32S3WebServer";
+const char *custom_ssid = "OrinTech EO-3";
 
 // DNS server
 const byte DNS_PORT = 53;
@@ -48,8 +49,8 @@ DNSServer dnsServer;
 // AP Config
 IPAddress apIP(192, 168, 4, 1);
 IPAddress netMsk(255, 255, 255, 0);
-char ap_ssid[32];
-String ap_password = "sunnycarrot023";
+char ap_ssid[32] = "OrinTechE0";
+String ap_password = "EO-3PasswordField";
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80); //TK Change to port 443 for secure network
@@ -176,31 +177,23 @@ bool testAttach = false; // Did the forward pwm pin successfully attach?
 // }
 
 void setupAP() {
-    uint8_t mac[6];
-    WiFi.macAddress(mac);
-    snprintf(ap_ssid, sizeof(ap_ssid), "esp_%02X%02X%02X%02X%02X%02X", 
-            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    // uint8_t mac[6];
+    // WiFi.macAddress(mac);
+    // snprintf(ap_ssid, sizeof(ap_ssid), "esp_%02X%02X%02X%02X%02X%02X", 
+    //         mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
-    Serial.print("Setting up AP: ");
-    Serial.println(ap_ssid);
+    strncpy(ap_ssid, custom_ssid, sizeof(ap_ssid));
 
-    if (!WiFi.softAPConfig(apIP, apIP, netMsk)) {
-        Serial.println("AP Config Failed");
-    }
-
-    if (!WiFi.softAP(ap_ssid, ap_password.c_str())) {
-        Serial.println("AP Setup Failed");
-    } else {
-        Serial.print("AP IP: ");
-        Serial.println(WiFi.softAPIP());
-    }
+    WiFi.softAPConfig(apIP, apIP, netMsk);
+    WiFi.softAP(ap_ssid, ap_password.c_str());
     
     dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
-    if (!dnsServer.start(DNS_PORT, "*", apIP)) {
-        Serial.println("DNS Server Failed");
-    } else {
-        Serial.println("DNS Server Started");
-    }
+    dnsServer.start(DNS_PORT, "*", apIP);
+    
+    Serial.print("Setting up AP: ");
+    Serial.println(ap_ssid);
+    Serial.print("AP IP: ");
+    Serial.println(WiFi.softAPIP());
 }
 
 // Initialize LittleFS
@@ -385,25 +378,20 @@ void setup() // Runs once after reset
   rgbLedWrite(RGBLedPin, 0, 0, 0); // LED off when setup completed
 
   // initWiFi();
-  setupAP(); // Replace initWiFi() with this
+  setupAP();
 
     // Print ESP Local IP Address
     //Serial.println(WiFi.localIP());
-    Serial.print("AP IP: ");
-    Serial.println(WiFi.softAPIP());  
 
     initFS();
     initWebSocket();
 
     // Captive Portal Handler
     server.onNotFound([](AsyncWebServerRequest *request){
-      Serial.printf("Request: host='%s', url='%s'\n", 
-                  request->host().c_str(), request->url().c_str());
     
       // Always redirect if not requesting AP IP
       if (!isIp(request->host()) || request->host() != apIP.toString()) {
         String redirectUrl = "http://" + apIP.toString() + "/";
-        Serial.printf("Redirecting to: %s\n", redirectUrl.c_str());
         request->redirect(redirectUrl);
       } else {
         // Serve index.html for all paths under AP IP
