@@ -6,12 +6,21 @@ And From: https://randomnerdtutorials.com/esp32-web-server-websocket-sliders/ */
 
 var gateway = `ws://${window.location.hostname}/ws`;
 var websocket;
-var isArmed = false;
+var isArmed = false; // is Armed - false = no / true = yes
+var isS = false; // is in seconds mode - false = no / true = yes
+
 window.addEventListener('load', onload);
 
 function onload(event) {
     initWebSocket();
     initButton();
+
+    document.querySelector('.card-grid').addEventListener('click', function(e) {
+        const card = e.target.closest('.card');
+        if (card && !e.target.closest('.timing-toggle')) {
+            selectCard(card);
+        }
+    });
 }
 
 function getValues(){
@@ -66,6 +75,9 @@ function onMessage(event) {
 function initButton() {
     document.getElementById('button').addEventListener('click', toggle);
     document.getElementById('update-button').addEventListener('click', handleUpdate);
+    document.querySelector('.timing-toggle').addEventListener('click', function(e) {
+        e.stopPropagation();
+    });
 }
 
   function toggle(){
@@ -83,21 +95,35 @@ function initButton() {
   }
 
 
-  function handleUpdate() {
-    if(isArmed) alert("Cannot update while armed!");
+function handleUpdate() {
+    if(isArmed) {
+        alert("Cannot update while armed!");
+        return;
+    }
     if (!selectedCard || isArmed) return;
     
     const slider = document.getElementById("slider");
     const newValue = parseFloat(slider.value);
     const oldValueSpan = document.querySelector('.updated-value-container .tile:first-child span');
     
-    document.getElementById(selectedCardState + "Value" + selectedCardId).textContent = newValue;
-
-    websocket.send(selectedCardId+selectedCardState+newValue.toString());
+    // Convert back to ms for card2 if in seconds mode
+    let valueToSend = newValue;
+    let displayValue = newValue;
     
-    oldValueSpan.textContent = newValue;
+    if (selectedCardId === '2' && isS) {
+        valueToSend = Math.round(newValue * 1000);  // convert to ms
+        displayValue = newValue;                   // keep display in seconds
+    }
+
+    // update the display
+    document.getElementById(selectedCardState + "Value" + selectedCardId).textContent = 
+        selectedCardId === '2' && isS ? displayValue.toFixed(2) : displayValue;
+
+    // send value to websocket server (always in ms for timing)
+    websocket.send(selectedCardId + selectedCardState + valueToSend.toString());
+    
+    oldValueSpan.textContent = displayValue.toFixed(1);
     selectCard(selectedCard);
-    updateSlider();
 }
 
 var selectedCard; // the acutal html element for the selected card
@@ -135,20 +161,33 @@ function updateSlider() {
     if(selectedCard == null || isArmed) return;
     
     const valueElement = document.getElementById(selectedCardState + "Value" + selectedCardId);
-    const inputValue = parseFloat(valueElement.textContent);
+    let inputValue = parseFloat(valueElement.textContent);
     const slider = document.getElementById("slider");
     const oldValueSpan = document.querySelector('.updated-value-container .tile:first-child span');
     const newValueText = document.getElementById("new");
 
-    // set slider values
-    slider.max = parseFloat(valueElement.getAttribute("data-max"));
-    slider.min = parseFloat(valueElement.getAttribute("data-min"));
-    slider.step = parseFloat(valueElement.getAttribute("data-step"));
-    newValueText.step = parseFloat(valueElement.getAttribute("data-step"));
+    // get base attributes (always in milliseconds)
+    let min = parseFloat(valueElement.getAttribute("data-min"));
+    let max = parseFloat(valueElement.getAttribute("data-max"));
+    let step = parseFloat(valueElement.getAttribute("data-step"));
+
+    if (selectedCardId === '2' && isS) { // converts to seconds if in seconds mode
+        min /= 1000;
+        max /= 1000;
+        step = 0.01; 
+    }
+
+    // set the slider values
+    slider.max = max;
+    slider.min = min;
+    slider.step = step;
+    newValueText.step = step;
     slider.value = inputValue;
-    // update the value displays
-    oldValueSpan.textContent = inputValue;
-    newValueText.value = inputValue;
+    
+    // update value displays
+    oldValueSpan.textContent = isS && selectedCardId === '2' ? inputValue.toFixed(2) : inputValue;
+    newValueText.value = isS && selectedCardId === '2' ? inputValue.toFixed(2) : inputValue;
+    
 }
 
 function updateValue() {
@@ -162,4 +201,27 @@ function syncSlider(){
     const slider = document.getElementById("slider");
     const inputValue = parseFloat(document.getElementById("new").value);
     slider.value = inputValue;
+}
+
+function toggleTiming() {
+    isS = !isS;
+    document.querySelector('#card2 .card-title').textContent = isS ? "Timing S" : "Timing mS";
+    
+    document.querySelectorAll('#FUnit2, #RUnit2').forEach(unit => {
+        unit.textContent = isS ? " S" : " mS";
+    });
+    
+    document.querySelectorAll('#FValue2, #RValue2').forEach(valueElement => {
+        let value = parseFloat(valueElement.textContent);
+        
+        if (isS) { // convert ms to seconds
+            valueElement.textContent = (value / 1000).toFixed(2);
+        } else { // convert seconds to ms
+            valueElement.textContent = Math.round(value * 1000);
+        }
+    });
+    
+    if (selectedCard && selectedCardId === '2') {
+        updateSlider();
+    }
 }

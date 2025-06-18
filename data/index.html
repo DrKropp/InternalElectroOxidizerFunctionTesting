@@ -15,7 +15,7 @@
     <div class="content">
         <div class="top-card">
             <h2>Enable Output</h2>
-            <p class="state">Output: <span id="state">ON</span></p>
+            <p class="state">Output: <span id="state">OFF</span></p>
             <button id="button" class="button">Toggle</button>
         </div>
         <br>
@@ -24,10 +24,11 @@
                 <p class="card-title">Voltage</p>
                 <p class="state" id="voltage"><span id="FValue1" data-min="10" data-max="26" data-step="0.1">14</span> V</p>
             </div>
-            <div class="card" onclick="selectCard(this)" id="card2">
+            <div class="card" id="card2">
                 <p class="card-title">Timing mS</p>
-                <p class="state">Foward: +<span id="FValue2" data-min="10" data-max="100" data-step="1">40</span> mS</p>
-                <p class="state">Reverse: -<span id="RValue2" data-min="10" data-max="100" data-step="1">40</span> mS</p>
+                <p class="state">Forward: +<span id="FValue2" data-min="10" data-max="5000" data-step="1">40</span><span id="FUnit2"> mS</span></p>
+                <p class="state">Reverse: -<span id="RValue2" data-min="10" data-max="5000" data-step="1">40</span><span id="RUnit2"> mS</span></p>
+                <button class="timing-toggle" onclick="toggleTiming()">Toggle S/ms</button>
             </div>
 
             <!-- <div class="card" onclick="selectCard(this)" id="card3">
