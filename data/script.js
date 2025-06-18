@@ -6,11 +6,21 @@ And From: https://randomnerdtutorials.com/esp32-web-server-websocket-sliders/ */
 
 var gateway = `ws://${window.location.hostname}/ws`;
 var websocket;
+var isArmed = false; // is Armed - false = no / true = yes
+var isS = false; // is in seconds mode - false = no / true = yes
+
 window.addEventListener('load', onload);
 
 function onload(event) {
     initWebSocket();
     initButton();
+
+    document.querySelector('.card-grid').addEventListener('click', function(e) {
+        const card = e.target.closest('.card');
+        if (card && !e.target.closest('.timing-toggle')) {
+            selectCard(card);
+        }
+    });
 }
 
 function getValues(){
@@ -38,7 +48,7 @@ function onClose(event) {
 function updateSliderPWM(element) {
     var sliderNumber = element.id.charAt(element.id.length-1);
     var sliderValue = document.getElementById(element.id).value;
-    document.getElementById("sliderValue"+sliderNumber).innerHTML = sliderValue;
+    document.getElementById("value"+sliderNumber).value = sliderValue;
     console.log(sliderValue);
     websocket.send(sliderNumber+"s"+sliderValue.toString());
 }
@@ -50,21 +60,168 @@ function onMessage(event) {
     var state;
     if (event.data == "1"){
         state = "ON";
+        //document.querySelector('.top-card .state span').color = "green";
       }
       else{
         state = "OFF";
+        //document.querySelector('.top-card .state span').color = "red";
       }
     for (var i = 0; i < keys.length; i++){
         var key = keys[i];
         document.getElementById(key).innerHTML = myObj[key];
-        document.getElementById("slider"+ (i+1).toString()).value = myObj[key];
     }
 }
 
 function initButton() {
     document.getElementById('button').addEventListener('click', toggle);
-  }
+    document.getElementById('update-button').addEventListener('click', handleUpdate);
+    document.querySelector('.timing-toggle').addEventListener('click', function(e) {
+        e.stopPropagation();
+    });
+}
 
   function toggle(){
+    //websocket.send('toggle');
+    if(isArmed){
+        isArmed = false;
+        document.getElementById('state').innerHTML = "OFF";
+        document.querySelector('.top-card').style.backgroundColor = "red";
+    } else {
+        isArmed = true;
+        document.getElementById('state').innerHTML = "ON";
+        document.querySelector('.top-card').style.backgroundColor = "green";
+    }
     websocket.send('toggle');
   }
+
+
+function handleUpdate() {
+    if(isArmed) {
+        alert("Cannot update while armed!");
+        return;
+    }
+    if (!selectedCard || isArmed) return;
+    
+    const slider = document.getElementById("slider");
+    const newValue = parseFloat(slider.value);
+    const oldValueSpan = document.querySelector('.updated-value-container .tile:first-child span');
+    
+    // Convert back to ms for card2 if in seconds mode
+    let valueToSend = newValue;
+    let displayValue = newValue;
+    
+    if (selectedCardId === '2' && isS) {
+        valueToSend = Math.round(newValue * 1000);  // convert to ms
+        displayValue = newValue;                   // keep display in seconds
+    }
+
+    // update the display
+    document.getElementById(selectedCardState + "Value" + selectedCardId).textContent = 
+        selectedCardId === '2' && isS ? displayValue.toFixed(2) : displayValue;
+
+    // send value to websocket server (always in ms for timing)
+    websocket.send(selectedCardId + selectedCardState + valueToSend.toString());
+    
+    oldValueSpan.textContent = displayValue.toFixed(1);
+    selectCard(selectedCard);
+}
+
+var selectedCard; // the acutal html element for the selected card
+var selectedCardId; // the id of the selected card: 1-4
+var selectedCardState = 'F'; // 'F' = Forward, 'R' = Reverse - 'F' is default
+
+function selectCard(element){
+    if(isArmed) return;
+    if(selectedCard == element){
+        if(selectedCard == document.getElementById('card1')) return;
+        document.getElementById(selectedCardState+"Value"+selectedCardId).classList.remove("selected");
+        if(selectedCardState == 'F'){
+            selectedCardState = 'R';
+        }
+        else{
+            selectedCardState = 'F';
+        }
+        document.getElementById(selectedCardState+"Value"+selectedCardId).classList.add("selected");
+    }
+    else{
+        if(selectedCard != null){
+            document.getElementById(selectedCardState+"Value"+selectedCardId).classList.remove("selected");
+            selectedCard.classList.remove("selected-card");
+        }
+        selectedCardState = 'F';
+        selectedCard = element;
+        selectedCardId = element.id.charAt(element.id.length-1);
+        document.getElementById(selectedCardState+"Value"+selectedCardId).classList.add("selected");
+    }
+    selectedCard.classList.add("selected-card");
+    updateSlider();
+}
+
+function updateSlider() {
+    if(selectedCard == null || isArmed) return;
+    
+    const valueElement = document.getElementById(selectedCardState + "Value" + selectedCardId);
+    let inputValue = parseFloat(valueElement.textContent);
+    const slider = document.getElementById("slider");
+    const oldValueSpan = document.querySelector('.updated-value-container .tile:first-child span');
+    const newValueText = document.getElementById("new");
+
+    // get base attributes (always in milliseconds)
+    let min = parseFloat(valueElement.getAttribute("data-min"));
+    let max = parseFloat(valueElement.getAttribute("data-max"));
+    let step = parseFloat(valueElement.getAttribute("data-step"));
+
+    if (selectedCardId === '2' && isS) { // converts to seconds if in seconds mode
+        min /= 1000;
+        max /= 1000;
+        step = 0.01; 
+    }
+
+    // set the slider values
+    slider.max = max;
+    slider.min = min;
+    slider.step = step;
+    newValueText.step = step;
+    slider.value = inputValue;
+    
+    // update value displays
+    oldValueSpan.textContent = isS && selectedCardId === '2' ? inputValue.toFixed(2) : inputValue;
+    newValueText.value = isS && selectedCardId === '2' ? inputValue.toFixed(2) : inputValue;
+    
+}
+
+function updateValue() {
+    if(selectedCard == null || isArmed) return;
+    const inputValue = parseFloat(document.getElementById("slider").value);
+    document.getElementById("new").value = inputValue;
+}
+
+function syncSlider(){
+    if(selectedCard == null || isArmed) return;
+    const slider = document.getElementById("slider");
+    const inputValue = parseFloat(document.getElementById("new").value);
+    slider.value = inputValue;
+}
+
+function toggleTiming() {
+    isS = !isS;
+    document.querySelector('#card2 .card-title').textContent = isS ? "Timing S" : "Timing mS";
+    
+    document.querySelectorAll('#FUnit2, #RUnit2').forEach(unit => {
+        unit.textContent = isS ? " S" : " mS";
+    });
+    
+    document.querySelectorAll('#FValue2, #RValue2').forEach(valueElement => {
+        let value = parseFloat(valueElement.textContent);
+        
+        if (isS) { // convert ms to seconds
+            valueElement.textContent = (value / 1000).toFixed(2);
+        } else { // convert seconds to ms
+            valueElement.textContent = Math.round(value * 1000);
+        }
+    });
+    
+    if (selectedCard && selectedCardId === '2') {
+        updateSlider();
+    }
+}

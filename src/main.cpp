@@ -30,14 +30,27 @@ Software To Do (TK):
 #include <ESPAsyncWebServer.h>
 #include "LittleFS.h"
 #include <ArduinoJson.h>
+#include <string>
+#include <DNSServer.h>
 
 // TK get rid of hard coded security information before release!
 // TK use the ESP32 as a wifi access point local network with secure login credentials. User access control?
 
 // Replace with your network credentials
-const char *ssid = "ExcitonClean";
-const char *password = "sunnycarrot023";
+// const char *ssid = "ExcitonClean";
+// const char *password = "sunnycarrot023";
 const char *hostname = "ESP32S3WebServer";
+const char *custom_ssid = "OrinTech EO-3";
+
+// DNS server
+const byte DNS_PORT = 53;
+DNSServer dnsServer;
+
+// AP Config
+IPAddress apIP(192, 168, 4, 1);
+IPAddress netMsk(255, 255, 255, 0);
+char ap_ssid[32] = "OrinTechE0";
+String ap_password = "EO-3PasswordField";
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80); //TK Change to port 443 for secure network
@@ -47,24 +60,45 @@ AsyncWebSocket ws("/ws");
 
 String message = "";
 String runState = "FALSE";
-String targetVolts = "0.0"; // targetVolts holds target voltage 10.0<TargetVolts<26.0 0.1V resolution
-String reverseTime = "0"; // reverseTime sets the reversal time in mS
 
-//Json Variable to Hold Slider Values
+String FValue1 = "14"; // OUTPUT VOLTAGE
+String FValue2 = "20"; // FORWARD TIME
+String RValue2 = "40"; // REVERSE TIME
+String FValue3 = "15"; // FOWARD CURRENT
+String RValue3 = "15"; // REVERSE CURRENT
+
+String targetVolts = "0.0"; // targetVolts holds target voltage 10.0<TargetVolts<26.0 0.1V resolution
+//String RValue2 = "0"; // reverseTime sets the reversal time in mS
+
+// Duty cycles
+int dutyCycle1F;
+int dutyCycle1R;
+int dutyCycle2F;
+int dutyCycle2R;
+int dutyCycle3F;
+int dutyCycle3R;
+
+//Json Variable to Hold Values
 JsonDocument controlValues;
 
-//Get Slider Values
-String getrunValues(){
+//Get Values
+String getValues(){
 
-controlValues["runState"] = "FALSE";
-controlValues["targetVolts"] = 14.0;
-controlValues["reverseTime"] = 40;
+// controlValues["runState"] = runState;
+// controlValues["targetVolts"] = targetVolts;
+// controlValues["reverseTime"] = RValue2;
+controlValues["FValue1"] = String(FValue1);
+controlValues["FValue2"] = String(FValue2);
+controlValues["RValue2"] = String(RValue2);
+controlValues["FValue3"] = String(FValue3);
+controlValues["RValue3"] = String(RValue3);
+
 
 String output;
 
-getrunValues.shrinkToFit();  // optional
-
-serializeJson(getrunValues, output);
+controlValues.shrinkToFit();  // optional
+serializeJson(controlValues, output);
+return output;
 }
 
 // Define some GPIO connections between ESP32-S3 and DRV8706H-Q1
@@ -100,7 +134,7 @@ bool outputDirection;
 bool nSleep;
 bool DRVOff;
 bool nFault;
-bool isRunning = false;
+bool isRunning = true;
 
 // RSP-1000-24 Control Variables
 const uint8_t outputBits = 10;  // 10 bit PWM resolution
@@ -114,7 +148,7 @@ uint32_t currentTimeMillis = 0; // Store the current time in mS
 uint32_t runstartTime = 0;      // Store the start time
 uint32_t runTime = 3600000 * 8; // mS time to run the system after button press. Currently 8 hours
 uint32_t reversestartTime = 0;  // Store the reversal cycle start time
-uint32_t reverseTime = 40000;   // uS time between reversals
+uint32_t reverseTimeUS = 40000;   // uS time between reversals
 uint32_t samplingstartTime = 0; // Store the sampling start time
 uint32_t samplingTime = 100;    // uS between taking current measurements
 
@@ -130,20 +164,40 @@ bool testAttach = false; // Did the forward pwm pin successfully attach?
 
 // put function declarations here:
 
-/* // Initialize WiFi
-void initWiFi() {
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  Serial.print("Connecting to WiFi ..");
-  while (WiFi.status() != WL_CONNECTED) {
-    Serial.print('.');
-    delay(1000);
-  }
-  Serial.println(WiFi.localIP());
-} */
+// Initialize WiFi
+// void initWiFi() {
+//   WiFi.mode(WIFI_STA);
+//   WiFi.begin(ssid, password);
+//   Serial.print("Connecting to WiFi ..");
+//   while (WiFi.status() != WL_CONNECTED) {
+//     Serial.print('.');
+//     delay(1000);
+//   }
+//   Serial.println(WiFi.localIP());
+// }
+
+void setupAP() {
+    // uint8_t mac[6];
+    // WiFi.macAddress(mac);
+    // snprintf(ap_ssid, sizeof(ap_ssid), "esp_%02X%02X%02X%02X%02X%02X", 
+    //         mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+    strncpy(ap_ssid, custom_ssid, sizeof(ap_ssid));
+
+    WiFi.softAPConfig(apIP, apIP, netMsk);
+    WiFi.softAP(ap_ssid, ap_password.c_str());
+    
+    dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
+    dnsServer.start(DNS_PORT, "*", apIP);
+    
+    Serial.print("Setting up AP: ");
+    Serial.println(ap_ssid);
+    Serial.print("AP IP: ");
+    Serial.println(WiFi.softAPIP());
+}
 
 // Initialize LittleFS
-/*void initFS() {
+void initFS() {
   if (!LittleFS.begin()) {
     Serial.println("An error has occurred while mounting LittleFS");
   }
@@ -152,8 +206,25 @@ void initWiFi() {
   }
 }
 
-void notifyClients(String sliderValues) {
-  ws.textAll(sliderValues);
+// HELPER FUNCTIONS
+// Check if string is an IP address
+bool isIp(String str) {
+  for (size_t i = 0; i < str.length(); i++) {
+    int c = str.charAt(i);
+    if (c != '.' && (c < '0' || c > '9')) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Convert IPAddress to String
+String toStringIp(IPAddress ip) {
+  return String(ip[0]) + "." + ip[1] + "." + ip[2] + "." + ip[3];
+}
+
+void notifyClients(String values) {
+  ws.textAll(values);
 }
 
 void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
@@ -161,29 +232,49 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
   if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
     data[len] = 0;
     message = (char*)data;
-    if (message.indexOf("1s") >= 0) {
-      sliderValue1 = message.substring(2);
-      dutyCycle1 = map(sliderValue1.toInt(), 0, 100, 0, 255);
-      Serial.println(dutyCycle1);
-      Serial.print(getSliderValues());
-      notifyClients(getSliderValues());
+    //Serial.println(message);
+    if(message.indexOf("toggle") >= 0) {
+      Serial.println("Toggled state");
+      isRunning = !isRunning;
+      notifyClients(getValues());
     }
-    if (message.indexOf("2s") >= 0) {
-      sliderValue2 = message.substring(2);
-      dutyCycle2 = map(sliderValue2.toInt(), 0, 100, 0, 255);
-      Serial.println(dutyCycle2);
-      Serial.print(getSliderValues());
-      notifyClients(getSliderValues());
+    if (message.indexOf("1F") >= 0) {
+      FValue1 = message.substring(2);
+      dutyCycle1F = map(FValue1.toInt(), 0, 100, 0, 255);
+      //Serial.println(dutyCycle1F);
+      Serial.println(getValues());
+      notifyClients(getValues());
     }
-    /* if (message.indexOf("3s") >= 0) {
-      sliderValue3 = message.substring(2);
-      dutyCycle3 = map(sliderValue3.toInt(), 0, 100, 0, 255);
-      Serial.println(dutyCycle3);
-      Serial.print(getSliderValues());
-      notifyClients(getSliderValues());
+    if (message.indexOf("2F") >= 0) {
+      FValue2 = message.substring(2);
+      dutyCycle2F = map(FValue2.toInt(), 0, 100, 0, 255);
+      //Serial.println(dutyCycle2F);
+      Serial.println(getValues());
+      notifyClients(getValues());
+    }
+    if (message.indexOf("2R") >= 0) {
+      RValue2 = message.substring(2);
+      dutyCycle2R = map(RValue2.toInt(), 0, 100, 0, 255);
+      //Serial.println(dutyCycle2R);
+      Serial.println(getValues());
+      notifyClients(getValues());
+    }
+    if (message.indexOf("3F") >= 0) {
+      FValue3 = message.substring(2);
+      dutyCycle3F = map(FValue3.toInt(), 0, 100, 0, 255);
+      //Serial.println(dutyCycle3F);
+      Serial.println(getValues());
+      notifyClients(getValues());
+    }
+    if (message.indexOf("3R") >= 0) {
+      RValue3 = message.substring(2);
+      dutyCycle3R = map(RValue3.toInt(), 0, 100, 0, 255);
+      //Serial.println(dutyCycle3R);
+      Serial.println(getValues());
+      notifyClients(getValues());
     }
     if (strcmp((char*)data, "getValues") == 0) {
-      notifyClients(getSliderValues());
+      notifyClients(getValues());
     }
   }
 }
@@ -229,7 +320,7 @@ String processor(const String &var)
     }
   }
   return String();
-} */
+}
 
 void setup() // Runs once after reset
 {
@@ -286,13 +377,27 @@ void setup() // Runs once after reset
 
   rgbLedWrite(RGBLedPin, 0, 0, 0); // LED off when setup completed
 
-  /* initWiFi();
+  // initWiFi();
+  setupAP();
 
     // Print ESP Local IP Address
-    Serial.println(WiFi.localIP());
+    //Serial.println(WiFi.localIP());
 
     initFS();
     initWebSocket();
+
+    // Captive Portal Handler
+    server.onNotFound([](AsyncWebServerRequest *request){
+    
+      // Always redirect if not requesting AP IP
+      if (!isIp(request->host()) || request->host() != apIP.toString()) {
+        String redirectUrl = "http://" + apIP.toString() + "/";
+        request->redirect(redirectUrl);
+      } else {
+        // Serve index.html for all paths under AP IP
+        request->send(LittleFS, "/index.html", "text/html");
+      }
+  });
 
     // Web Server Root URL
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -302,32 +407,46 @@ void setup() // Runs once after reset
     server.serveStatic("/", LittleFS, "/");
 
     // Start server
-    server.begin(); */
+    server.begin(); 
+
+    runstartTime = millis();
+    reversestartTime = micros();
+    samplingstartTime = micros(); // Add a small 17uS offset to sampling start time to prevent interference with other operations
 }
 
 void loop()
 {
-  // ws.cleanupClients();
+  dnsServer.processNextRequest(); // Handle DNS queries
+  ws.cleanupClients();
+
+  static unsigned long lastDnsProcess = 0;
+  if (millis() - lastDnsProcess > 10) {
+      dnsServer.processNextRequest();
+      lastDnsProcess = millis();
+  }
+
   currentTime = micros();
   currentTimeMillis = millis();
 
+
+
   if (isRunning == false)
   {
-    if (digitalRead(testButton) == LOW) // Watch for the button press, then wake the DRV8706, enable the outputs, then drive the output
-    {
-      VoltControl_PWM = round(TargetVolts / TargetVoltsConversionFactor);
-      ledcWrite(VoltControl_PWM_Pin, VoltControl_PWM); // Set the RSP1000-24 output voltage to the target value
-      Serial.print("OutputVoltage = ");
-      Serial.println(VoltControl_PWM * TargetVoltsConversionFactor);
-      digitalWrite(outputEnablePin, HIGH); // Activate Outputs !Possible Danger! Should see PVDD on output!
-      rgbLedWrite(48, 128, 0, 0);          // Bright red to show outputs are active
+    rgbLedWrite(48, 0, 0, 0); // led off
+    digitalWrite(outputEnablePin, LOW); // Deactivate outputs
+    // if (digitalRead(testButton) == LOW) // Watch for the button press, then wake the DRV8706, enable the outputs, then drive the output
+    // {
+    //   VoltControl_PWM = round(TargetVolts / TargetVoltsConversionFactor);
+    //   ledcWrite(VoltControl_PWM_Pin, VoltControl_PWM); // Set the RSP1000-24 output voltage to the target value
+    //   Serial.print("FValue1 = ");
+    //   Serial.println(VoltControl_PWM * TargetVoltsConversionFactor);
+    //   digitalWrite(outputEnablePin, HIGH); // Activate Outputs !Possible Danger! Should see PVDD on output!
+      
 
-      runstartTime = currentTimeMillis;
-      reversestartTime = currentTime;
-      samplingstartTime = currentTime; // Add a small 17uS offset to sampling start time to prevent interference with other operations
-      isRunning = true;
-      delay(250); // Need to implement a more robust solution for user holding the button down.
-    }
+      
+    //   isRunning = true;
+    //   delay(250); // Need to implement a more robust solution for user holding the button down.
+    // }
   }
 
   if (currentTimeMillis - runstartTime >= runTime) // Turn off the output after the run is over
@@ -340,6 +459,13 @@ void loop()
 
   if (isRunning == true)
   {
+    rgbLedWrite(48, 128, 0, 0);          // Bright red to show outputs are active
+    digitalWrite(outputEnablePin, HIGH); // Activate Outputs !Possible Danger! Should see PVDD on output!
+
+    // Get the output voltage
+    VoltControl_PWM = round((FValue1.toFloat() - 0.3) / TargetVoltsConversionFactor); // TEMP 0.3 VALUE FOR OFFSET UNTIL NEW CALIBRATION
+    ledcWrite(VoltControl_PWM_Pin, VoltControl_PWM); // Set the RSP1000-24 output voltage to the target value
+
     if (digitalRead(testButton) == LOW) // Watch for another button press, disable the output
     {
       digitalWrite(outputEnablePin, LOW);
@@ -347,11 +473,20 @@ void loop()
       delay(250);
     }
 
-    if (currentTime - reversestartTime >= reverseTime) // Non-Blocking time based control loop for reversing current direction
-    {
-      reversestartTime = currentTime;
-      outputDirection = !outputDirection;                // Reverse the output direction variable
-      digitalWrite(outputDirectionPin, outputDirection); // Change the output direction
+    if(outputDirection == false){ // Runs when output direction is forward
+      if (currentTime - reversestartTime >= FValue2.toInt() * 1000) // Non-Blocking time based control loop for reversing current direction
+      {
+        reversestartTime = currentTime;
+        outputDirection = !outputDirection;                // Reverse the output direction variable
+        digitalWrite(outputDirectionPin, outputDirection); // Change the output direction
+      }
+    } else { // Runs when output direction is reverse
+      if (currentTime - reversestartTime >= RValue2.toInt() * 1000) // Non-Blocking time based control loop for reversing current direction
+      {
+        reversestartTime = currentTime;
+        outputDirection = !outputDirection;                // Reverse the output direction variable
+        digitalWrite(outputDirectionPin, outputDirection); // Change the output direction
+      }
     }
 
     if (currentTime - samplingstartTime >= samplingTime)
@@ -380,3 +515,4 @@ void loop()
     }
   }
 }
+
