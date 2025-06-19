@@ -70,7 +70,7 @@ html {
     appearance: none;
     margin: 0 auto;
     width: 100%;
-    min-width: 400px;
+    min-width: 340px;
     height: 15px;
     border-radius: 10px;
     background: #FFD65C;
@@ -146,7 +146,7 @@ html {
     margin: 10px auto;
    }
    .updated-value{
-    font-size: 2.5rem;
+    font-size: 2rem;
     color: #1282A2;
     font-weight: bold;
     margin-bottom:0px;
@@ -169,7 +169,7 @@ html {
     }
     .tile #new {
       color: rgb(214, 69, 46);
-      font-size: 2.5rem;
+      font-size: 2rem;
       font-weight: bold;
       width: 110px;
     }
