@@ -146,10 +146,11 @@ html {
     margin: 10px auto;
    }
    .updated-value{
-    font-size: 1.8rem;
+    font-size: 1.6rem;
     color: #1282A2;
     font-weight: bold;
     margin-bottom:0px;
+    width: 100%;
    }
    .tile {
     width: 100%;
