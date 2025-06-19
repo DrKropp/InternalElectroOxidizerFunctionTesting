@@ -159,6 +159,14 @@ function selectCard(element){
                     unit.textContent = " V";
                 }
             });            
+        } else {
+            document.querySelectorAll('#FUnit2, #RUnit2, #OldUnit, #NewUnit').forEach(unit => {
+                if(unit == document.querySelector('#NewUnit')){
+                    unit.textContent = isS ? "S" : "mS";
+                } else {
+                    unit.textContent = isS ? " S" : " mS";
+                }
+            });
         }
     }
     selectedCard.classList.add("selected-card");
@@ -215,6 +223,7 @@ function syncSlider(){
 }
 
 function toggleTiming(element) {
+    if(element == null || selectedCardId == '1') return;
     if(element.classList.contains('timing-selected')) return;
         
     isS = !isS;
