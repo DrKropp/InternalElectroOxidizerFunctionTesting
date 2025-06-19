@@ -26,9 +26,10 @@
             </div>
             <div class="card" id="card2">
                 <p class="card-title">Timing mS</p>
-                <p class="state">Forward: +<span id="FValue2" data-min="10" data-max="5000" data-step="1">40</span><span id="FUnit2"> mS</span></p>
-                <p class="state">Reverse: -<span id="RValue2" data-min="10" data-max="5000" data-step="1">40</span><span id="RUnit2"> mS</span></p>
-                <button class="timing-toggle" onclick="toggleTiming()">Toggle S/ms</button>
+                <p class="state">Forward: +<span id="FValue2" data-min="10" data-max="5000" data-step="5">40</span><span id="FUnit2"> mS</span></p>
+                <p class="state">Reverse: -<span id="RValue2" data-min="10" data-max="5000" data-step="5">40</span><span id="RUnit2"> mS</span></p>
+                <button id="seconds" class="timing-toggle" onclick="toggleTiming(this)">S</button>
+                <button id="milliseconds" class="timing-toggle timing-selected" onclick="toggleTiming(this)">mS</button>
             </div>
 
             <!-- <div class="card" onclick="selectCard(this)" id="card3">
@@ -43,11 +44,11 @@
             </p>
             <div class="updated-value-container">
                 <div class="tile">
-                    <p class="updated-value" id="old"><span>14</span></p>
+                    <p class="updated-value" id="old"><span>14</span><span id="OldUnit"> mS</span></p>
                     <p class="tile-title" >Old</p>
                 </div>
                 <div class="tile">
-                    <p class="updated-value"><input type="number" id="new" step="0.1" value="14" oninput="syncSlider()"></p>
+                    <p class="updated-value"><input type="number" id="new" step="0.1" value="14" oninput="syncSlider()"><span id="NewUnit">mS</span></p>
                     <p class="tile-title">New</p>
                 </div>
             </div>

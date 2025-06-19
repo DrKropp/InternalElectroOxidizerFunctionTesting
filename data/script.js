@@ -112,7 +112,7 @@ function handleUpdate() {
     
     if (selectedCardId === '2' && isS) {
         valueToSend = Math.round(newValue * 1000);  // convert to ms
-        displayValue = newValue;                   // keep display in seconds
+        displayValue = newValue;                    // keep display in seconds
     }
 
     // update the display
@@ -122,7 +122,7 @@ function handleUpdate() {
     // send value to websocket server (always in ms for timing)
     websocket.send(selectedCardId + selectedCardState + valueToSend.toString());
     
-    oldValueSpan.textContent = displayValue.toFixed(1);
+    oldValueSpan.textContent = displayValue.toFixed(2);
     selectCard(selectedCard);
 }
 
@@ -142,8 +142,7 @@ function selectCard(element){
             selectedCardState = 'F';
         }
         document.getElementById(selectedCardState+"Value"+selectedCardId).classList.add("selected");
-    }
-    else{
+    } else {
         if(selectedCard != null){
             document.getElementById(selectedCardState+"Value"+selectedCardId).classList.remove("selected");
             selectedCard.classList.remove("selected-card");
@@ -152,6 +151,15 @@ function selectCard(element){
         selectedCard = element;
         selectedCardId = element.id.charAt(element.id.length-1);
         document.getElementById(selectedCardState+"Value"+selectedCardId).classList.add("selected");
+        if(selectedCardId == '1'){
+            document.querySelectorAll('#OldUnit, #NewUnit').forEach(unit => {
+                if(unit == document.querySelector('#NewUnit')){
+                    unit.textContent = "V";
+                } else {
+                    unit.textContent = " V";
+                }
+            });            
+        }
     }
     selectedCard.classList.add("selected-card");
     updateSlider();
@@ -173,8 +181,9 @@ function updateSlider() {
 
     if (selectedCardId === '2' && isS) { // converts to seconds if in seconds mode
         min /= 1000;
+        if(min < 0.1) min = 0.1;
         max /= 1000;
-        step = 0.01; 
+        step = 0.1;
     }
 
     // set the slider values
@@ -182,6 +191,8 @@ function updateSlider() {
     slider.min = min;
     slider.step = step;
     newValueText.step = step;
+    newValueText.min = min;
+    newValueText.max = max;
     slider.value = inputValue;
     
     // update value displays
@@ -203,16 +214,31 @@ function syncSlider(){
     slider.value = inputValue;
 }
 
-function toggleTiming() {
+function toggleTiming(element) {
+    if(element.classList.contains('timing-selected')) return;
+        
     isS = !isS;
+    if(isS){
+        document.getElementById('seconds').classList.add('timing-selected');
+        document.getElementById('milliseconds').classList.remove('timing-selected');
+    } else {
+        document.getElementById('milliseconds').classList.add('timing-selected');
+        document.getElementById('seconds').classList.remove('timing-selected');
+    }
+
     document.querySelector('#card2 .card-title').textContent = isS ? "Timing S" : "Timing mS";
     
-    document.querySelectorAll('#FUnit2, #RUnit2').forEach(unit => {
-        unit.textContent = isS ? " S" : " mS";
+    document.querySelectorAll('#FUnit2, #RUnit2, #OldUnit, #NewUnit').forEach(unit => {
+        if(unit == document.querySelector('#NewUnit')){
+            unit.textContent = isS ? "S" : "mS";
+        } else {
+            unit.textContent = isS ? " S" : " mS";
+        }
     });
     
     document.querySelectorAll('#FValue2, #RValue2').forEach(valueElement => {
         let value = parseFloat(valueElement.textContent);
+        if(value < 0.1) value = 0.1;
         
         if (isS) { // convert ms to seconds
             valueElement.textContent = (value / 1000).toFixed(2);
