@@ -116,7 +116,7 @@ const uint8_t DRVOffPin = 16;          // Disable DRV8706H-Q1 drive output witho
 const uint8_t nFaultPin = 17;          // Fault indicator output pulled low to indicate fault condition
 
 // Structures for rapid ADC reading
-#define CONVERSIONS_PER_PIN 5
+#define CONVERSIONS_PER_PIN 50
 uint8_t SO_Pin[] = {2};                   // Analog signal proportional to output current, values below VCC/2 for negative current
 volatile bool adc_conversion_done = false; // Flag which will be set in ISR when conversion is done
 adc_continuous_data_t *result = NULL;     // Result structure for ADC Continuous reading
@@ -168,7 +168,7 @@ const float TargetVoltsConversionFactor = 0.0301686059427937; // Slope Value fro
 const float ADC_REF_VOLTAGE = 3.3f;          // Reference voltage in volts
 const float ADC_MAX_COUNTS = 4095.0f;         // 12-bit resolution
 const float CURRENT_ZERO_POINT = 2048.0f;     // 2048 counts = 0A
-const float SLOPE = 24.8242424f;     // From your calibration
+const float SLOPE = 26.2458f;     // From calibration
 const float VOLTSTOCOUNTS = 1241.21212121;
 
 bool testAttach = false; // Did the forward pwm pin successfully attach?
@@ -511,7 +511,7 @@ void loop()
 
           uint32_t current_mV = result[0].avg_read_mvolts;
           
-          outputCurrent = ((result[0].avg_read_mvolts/1000.0f)*(VOLTSTOCOUNTS)-CURRENT_ZERO_POINT)/SLOPE; // Convert mV to amps
+          outputCurrent = ((result[0].avg_read_mvolts/1000.0f)*(VOLTSTOCOUNTS)-CURRENT_ZERO_POINT)/SLOPE; // Convert mV to amps -> Amps = (ADCcount - VCC/2)/slope
 
           // Serial.printf("\nADC PIN %d data:", result[0].pin);
           // Serial.printf("\n   Avg raw value = %d", result[0].avg_read_raw);
@@ -526,6 +526,7 @@ void loop()
 
           Serial.print(">SOADC:"); // Send formatted serial output to Teleplot serial data plotter
           Serial.println(outputCurrent);
+
           //Serial.print(">SOADC:"); // Send formatted serial output to Teleplot serial data plotter
           //Serial.println(result[0].avg_read_mvolts);
           analogContinuousStart(); // Start ADC conversions and wait for callback function to set adc_conversion_done flag to true
