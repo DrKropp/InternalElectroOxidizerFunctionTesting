@@ -40,7 +40,7 @@ Software To Do (TK):
 // const char *ssid = "ExcitonClean";
 // const char *password = "sunnycarrot023";
 const char *hostname = "ESP32S3WebServer";
-const char *custom_ssid = "OrinTech EO-3";
+const char *custom_ssid = "OrinTech EO-TEST";
 
 // DNS server
 const byte DNS_PORT = 53;
@@ -49,8 +49,8 @@ DNSServer dnsServer;
 // AP Config
 IPAddress apIP(192, 168, 4, 1);
 IPAddress netMsk(255, 255, 255, 0);
-char ap_ssid[32] = "OrinTechE0";
-String ap_password = "EO-3PasswordField";
+char ap_ssid[32] = "OrinTechEO";
+String ap_password = "EO-TESTPasswordField";
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80); //TK Change to port 443 for secure network
@@ -66,6 +66,8 @@ String FValue2 = "20"; // FORWARD TIME
 String RValue2 = "40"; // REVERSE TIME
 String FValue3 = "15"; // FOWARD CURRENT
 String RValue3 = "15"; // REVERSE CURRENT
+float outputCurrent = 0.0;  // Amps
+float outputVoltage = 0.0;  // Volts
 
 String targetVolts = "0.0"; // targetVolts holds target voltage 10.0<TargetVolts<26.0 0.1V resolution
 //String RValue2 = "0"; // reverseTime sets the reversal time in mS
@@ -92,6 +94,8 @@ controlValues["FValue2"] = String(FValue2);
 controlValues["RValue2"] = String(RValue2);
 controlValues["FValue3"] = String(FValue3);
 controlValues["RValue3"] = String(RValue3);
+controlValues["outputVoltage"] = String(outputVoltage, 3);
+controlValues["outputCurrent"] = String(outputCurrent, 3);
 
 
 String output;
@@ -114,13 +118,13 @@ const uint8_t nFaultPin = 17;          // Fault indicator output pulled low to i
 // Structures for rapid ADC reading
 #define CONVERSIONS_PER_PIN 5
 uint8_t SO_Pin[] = {2};                   // Analog signal proportional to output current, values below VCC/2 for negative current
-volatile bool adc_coversion_done = false; // Flag which will be set in ISR when conversion is done
+volatile bool adc_conversion_done = false; // Flag which will be set in ISR when conversion is done
 adc_continuous_data_t *result = NULL;     // Result structure for ADC Continuous reading
 
 // ISR Function that will be triggered when ADC conversion is done
 void ARDUINO_ISR_ATTR adcComplete()
 {
-  adc_coversion_done = true;
+  adc_conversion_done = true;
 }
 
 // Define other ESP32-S3 GPIO connections
@@ -159,6 +163,13 @@ uint16_t SO_ADC;                    // raw, unscaled current output reading
 
 // Some other constants
 const float TargetVoltsConversionFactor = 0.0301686059427937; // Slope Value from calibration 16Jan2025
+
+// ADC Constants
+const float ADC_REF_VOLTAGE = 3.3f;          // Reference voltage in volts
+const float ADC_MAX_COUNTS = 4095.0f;         // 12-bit resolution
+const float CURRENT_ZERO_POINT = 2048.0f;     // 2048 counts = 0A
+const float SLOPE = 24.8242424f;     // From your calibration
+const float VOLTSTOCOUNTS = 1241.21212121;
 
 bool testAttach = false; // Did the forward pwm pin successfully attach?
 
@@ -343,9 +354,9 @@ void setup() // Runs once after reset
   pinMode(DRVOffPin, OUTPUT);
   pinMode(nFaultPin, INPUT); // Fault indicator output pulled low to indicate fault condition, requires pullup resistor
 
-  analogContinuousSetWidth(12);                                          // Set the resolution to 9-12 bits (default is 12 bits)
+  analogContinuousSetWidth(12);                                          // Set the resolution to 9-12 bits (default is 12 bits)W
   analogContinuousSetAtten(ADC_11db);                                    // Optional: Set different attenaution (default is ADC_11db)
-  analogContinuous(SO_Pin, 1, CONVERSIONS_PER_PIN, 20000, &adcComplete); // Setup ADC Continuous, how many conversions to average, sampling frequency, callback function
+  analogContinuous(SO_Pin, 1, CONVERSIONS_PER_PIN, 1000, &adcComplete); // Setup ADC Continuous, how many conversions to average, sampling frequency, callback function
   analogContinuousStart();                                               // Start ADC Continuous conversions
 
   pinMode(testButton, INPUT_PULLUP);
@@ -441,9 +452,6 @@ void loop()
     //   Serial.print("FValue1 = ");
     //   Serial.println(VoltControl_PWM * TargetVoltsConversionFactor);
     //   digitalWrite(outputEnablePin, HIGH); // Activate Outputs !Possible Danger! Should see PVDD on output!
-      
-
-      
     //   isRunning = true;
     //   delay(250); // Need to implement a more robust solution for user holding the button down.
     // }
@@ -492,17 +500,35 @@ void loop()
     if (currentTime - samplingstartTime >= samplingTime)
     {
       samplingstartTime = currentTime;
-      if (adc_coversion_done == true)
+      if (adc_conversion_done == true)
       {
         // Set ISR flag back to false
-        adc_coversion_done = false;
+        adc_conversion_done = false;
         // Read data from ADC
         if (analogContinuousRead(&result, 0))
         {
           analogContinuousStop(); // Stop ADC Continuous conversions to have more time to process (print) the data
-          // Serial.print(">SOADC:"); // Send formatted serial output to Teleplot serial data plotter
-          // Serial.println(result[0].avg_read_mvolts);
-          analogContinuousStart(); // Start ADC conversions and wait for callback function to set adc_coversion_done flag to true
+
+          uint32_t current_mV = result[0].avg_read_mvolts;
+          
+          outputCurrent = ((result[0].avg_read_mvolts/1000.0f)*(VOLTSTOCOUNTS)-CURRENT_ZERO_POINT)/SLOPE; // Convert mV to amps
+
+          // Serial.printf("\nADC PIN %d data:", result[0].pin);
+          // Serial.printf("\n   Avg raw value = %d", result[0].avg_read_raw);
+          // Serial.printf("\n   Avg millivolts value = %d", result[0].avg_read_mvolts);
+          // Serial.printf("\n   Avg Counts value = %f", ((result[0].avg_read_mvolts/1000.0f)*(VOLTSTOCOUNTS)));
+          // Serial.printf("\n   Avg Amps value = %f", outputCurrent);
+
+          
+          //float rawCounts = (result[0].avg_read_mvolts / 1000.0f) * (ADC_MAX_COUNTS / ADC_REF_VOLTAGE);
+
+          //outputCurrent = (rawCounts - CURRENT_ZERO_POINT) / SLOPE; // Convert raw counts to amps
+
+          Serial.print(">SOADC:"); // Send formatted serial output to Teleplot serial data plotter
+          Serial.println(outputCurrent);
+          //Serial.print(">SOADC:"); // Send formatted serial output to Teleplot serial data plotter
+          //Serial.println(result[0].avg_read_mvolts);
+          analogContinuousStart(); // Start ADC conversions and wait for callback function to set adc_conversion_done flag to true
         }
         else
         {
