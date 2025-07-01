@@ -116,7 +116,7 @@ const uint8_t DRVOffPin = 16;          // Disable DRV8706H-Q1 drive output witho
 const uint8_t nFaultPin = 17;          // Fault indicator output pulled low to indicate fault condition
 
 // Structures for rapid ADC reading
-#define CONVERSIONS_PER_PIN 50
+#define CONVERSIONS_PER_PIN 500
 uint8_t SO_Pin[] = {2};                   // Analog signal proportional to output current, values below VCC/2 for negative current
 volatile bool adc_conversion_done = false; // Flag which will be set in ISR when conversion is done
 adc_continuous_data_t *result = NULL;     // Result structure for ADC Continuous reading
@@ -356,7 +356,7 @@ void setup() // Runs once after reset
 
   analogContinuousSetWidth(12);                                          // Set the resolution to 9-12 bits (default is 12 bits)W
   analogContinuousSetAtten(ADC_11db);                                    // Optional: Set different attenaution (default is ADC_11db)
-  analogContinuous(SO_Pin, 1, CONVERSIONS_PER_PIN, 1000, &adcComplete); // Setup ADC Continuous, how many conversions to average, sampling frequency, callback function
+  analogContinuous(SO_Pin, 1, CONVERSIONS_PER_PIN, 20000, &adcComplete); // Setup ADC Continuous, how many conversions to average, sampling frequency, callback function
   analogContinuousStart();                                               // Start ADC Continuous conversions
 
   pinMode(testButton, INPUT_PULLUP);
@@ -511,7 +511,8 @@ void loop()
 
           uint32_t current_mV = result[0].avg_read_mvolts;
           
-          outputCurrent = ((result[0].avg_read_mvolts/1000.0f)*(VOLTSTOCOUNTS)-CURRENT_ZERO_POINT)/SLOPE; // Convert mV to amps -> Amps = (ADCcount - VCC/2)/slope
+         //outputCurrent = (((result[0].avg_read_mvolts/1000.0f)*(VOLTSTOCOUNTS))-CURRENT_ZERO_POINT)/SLOPE; // Convert mV to amps -> Amps = (ADCcount - VCC/2)/slope
+          outputCurrent = ((result[0].avg_read_raw)-CURRENT_ZERO_POINT)/SLOPE;
 
           // Serial.printf("\nADC PIN %d data:", result[0].pin);
           // Serial.printf("\n   Avg raw value = %d", result[0].avg_read_raw);

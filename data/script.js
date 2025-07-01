@@ -77,7 +77,7 @@ function onMessage(event) {
 }
 
 function initButton() {
-    document.getElementById('button').addEventListener('click', toggle);
+    document.getElementById('toggle-card').addEventListener('click', toggle);
     document.getElementById('update-button').addEventListener('click', handleUpdate);
     document.querySelector('.timing-toggle').addEventListener('click', function(e) {
         e.stopPropagation();
