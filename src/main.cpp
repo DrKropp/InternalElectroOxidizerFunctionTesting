@@ -39,9 +39,10 @@ Software To Do (TK):
 // Replace with your network credentials
 // const char *ssid = "ExcitonClean";
 // const char *password = "sunnycarrot023";
-const char *hostname = "ESP32S3WebServer";
-const char *custom_ssid = "OrinTech EO-3";
-
+// Home network credentials for testing
+const char *ssid = "Hogwarts Express";  
+const char *password = "ghy343Ai9"; 
+const char *hostname = "OrinTechBox01";
 // DNS server
 const byte DNS_PORT = 53;
 DNSServer dnsServer;
@@ -176,24 +177,45 @@ bool testAttach = false; // Did the forward pwm pin successfully attach?
 //   Serial.println(WiFi.localIP());
 // }
 
-void setupAP() {
-    // uint8_t mac[6];
-    // WiFi.macAddress(mac);
-    // snprintf(ap_ssid, sizeof(ap_ssid), "esp_%02X%02X%02X%02X%02X%02X", 
-    //         mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+// void setupAP() {
+//     // uint8_t mac[6];
+//     // WiFi.macAddress(mac);
+//     // snprintf(ap_ssid, sizeof(ap_ssid), "esp_%02X%02X%02X%02X%02X%02X", 
+//     //         mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
-    strncpy(ap_ssid, custom_ssid, sizeof(ap_ssid));
+//     strncpy(ap_ssid, custom_ssid, sizeof(ap_ssid));
 
-    WiFi.softAPConfig(apIP, apIP, netMsk);
-    WiFi.softAP(ap_ssid, ap_password.c_str());
+//     WiFi.softAPConfig(apIP, apIP, netMsk);
+//     WiFi.softAP(ap_ssid, ap_password.c_str());
     
-    dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
-    dnsServer.start(DNS_PORT, "*", apIP);
+//     dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
+//     dnsServer.start(DNS_PORT, "*", apIP);
     
-    Serial.print("Setting up AP: ");
-    Serial.println(ap_ssid);
-    Serial.print("AP IP: ");
-    Serial.println(WiFi.softAPIP());
+//     Serial.print("Setting up AP: ");
+//     Serial.println(ap_ssid);
+//     Serial.print("AP IP: ");
+//     Serial.println(WiFi.softAPIP());
+// }
+
+void initWiFi() {
+  WiFi.setHostname(hostname);
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to WiFi ..");
+  
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+    Serial.print('.');
+    delay(500);
+    attempts++;
+  }
+  
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nConnected! Hostname: " + String(hostname));
+    Serial.println("IP address: " + WiFi.localIP().toString());
+  } else {
+    Serial.println("\nFailed to connect to WiFi!");
+  }
 }
 
 // Initialize LittleFS
@@ -322,108 +344,93 @@ String processor(const String &var)
   return String();
 }
 
-void setup() // Runs once after reset
-{
-  // Initialize Serial communication
+void setup() {
   Serial.begin(460800);
-  delay(5000); // Wait for serial monitor to be ready
-  // Serial.println("startup OK");
+  delay(5000);
   rgbLedWrite(RGBLedPin, 0, 55, 0);
 
-  // Enable input and output pins
-  testAttach = ledcAttach(VoltControl_PWM_Pin, PWMFreq, outputBits); // Pin 8 to output PWM and control output voltage
-  if (testAttach == false)
-  {
-    Serial.println("Error in RSP1000-24 Control");
-  }
+  testAttach = ledcAttach(VoltControl_PWM_Pin, PWMFreq, outputBits);
+  if (!testAttach) Serial.println("Error in RSP1000-24 Control");
 
   pinMode(outputEnablePin, OUTPUT);
   pinMode(outputDirectionPin, OUTPUT);
   pinMode(nSleepPin, OUTPUT);
   pinMode(DRVOffPin, OUTPUT);
-  pinMode(nFaultPin, INPUT); // Fault indicator output pulled low to indicate fault condition, requires pullup resistor
+  pinMode(nFaultPin, INPUT);
 
-  analogContinuousSetWidth(12);                                          // Set the resolution to 9-12 bits (default is 12 bits)
-  analogContinuousSetAtten(ADC_11db);                                    // Optional: Set different attenaution (default is ADC_11db)
-  analogContinuous(SO_Pin, 1, CONVERSIONS_PER_PIN, 20000, &adcComplete); // Setup ADC Continuous, how many conversions to average, sampling frequency, callback function
-  analogContinuousStart();                                               // Start ADC Continuous conversions
+  analogContinuousSetWidth(12);
+  analogContinuousSetAtten(ADC_11db);
+  analogContinuous(SO_Pin, 1, CONVERSIONS_PER_PIN, 20000, &adcComplete);
+  analogContinuousStart();
 
   pinMode(testButton, INPUT_PULLUP);
 
-  // Assert all pins to safe starting values
-  digitalWrite(nSleepPin, LOW);          // Send sleep signal
-  digitalWrite(DRVOffPin, HIGH);         // Send output OFF signal
-  digitalWrite(outputEnablePin, LOW);    // Initialize EN signal
-  digitalWrite(outputDirectionPin, LOW); // Initialize PH signal
+  // Initialize to safe state
+  digitalWrite(nSleepPin, LOW);
+  digitalWrite(DRVOffPin, HIGH);
+  digitalWrite(outputEnablePin, LOW);
+  digitalWrite(outputDirectionPin, LOW);
 
-  // At this point the DRV8706H-Q1 Should be asleep with no activity on the H-Bridge mosfets
+  ledcWrite(VoltControl_PWM_Pin, VoltControl_PWM);
+  rgbLedWrite(RGBLedPin, 0, 23, 10);
+  delay(100);
 
-  ledcWrite(VoltControl_PWM_Pin, VoltControl_PWM); // Set the RSP-1000-24 to a low but stable output voltage, about 9V
-  Serial.print("RSP1000-24 Voltage Set to ");
-  Serial.print(VoltControl_PWM * TargetVoltsConversionFactor);
-  Serial.println("V");
-  rgbLedWrite(RGBLedPin, 0, 23, 10); // Blue to show that RSP-1000-24 voltage is being set
-  delay(100);                        // wait 1 second for power supply to stabilize
-
-  digitalWrite(nSleepPin, HIGH); // Wake the DRV8706 but don't output any drive signals to the H-Bridge
+  digitalWrite(nSleepPin, HIGH);
   Serial.println("DRV8706 Waking Up!");
-  rgbLedWrite(RGBLedPin, 0, 23, 0); // Green for 1 second to show that DRV8706 is awake
+  rgbLedWrite(RGBLedPin, 0, 23, 0);
   delay(100);
 
-  digitalWrite(DRVOffPin, LOW); // Enable outputs but don't activate them
+  digitalWrite(DRVOffPin, LOW);
   Serial.println("DRV8706 Output Enabled! Outputs off...");
-  rgbLedWrite(48, 23, 23, 23); // White for 1 second to show that DRV8706 outputs are enabled
+  rgbLedWrite(48, 23, 23, 23);
   delay(100);
 
-  rgbLedWrite(RGBLedPin, 0, 0, 0); // LED off when setup completed
+  rgbLedWrite(RGBLedPin, 0, 0, 0);
 
-  // initWiFi();
-  setupAP();
+  // Initialize WiFi and filesystem
+  initWiFi();
+  initFS();
+  initWebSocket();
 
-    // Print ESP Local IP Address
-    //Serial.println(WiFi.localIP());
-
-    initFS();
-    initWebSocket();
-
-    // Captive Portal Handler
-    server.onNotFound([](AsyncWebServerRequest *request){
-    
-      // Always redirect if not requesting AP IP
-      if (!isIp(request->host()) || request->host() != apIP.toString()) {
-        String redirectUrl = "http://" + apIP.toString() + "/";
-        request->redirect(redirectUrl);
-      } else {
-        // Serve index.html for all paths under AP IP
-        request->send(LittleFS, "/index.html", "text/html");
-      }
+  server.onNotFound([](AsyncWebServerRequest *request){
+    request->send(LittleFS, "/index.html", "text/html");
   });
 
-    // Web Server Root URL
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-      request->send(LittleFS, "/index.html", "text/html");
-    });
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(LittleFS, "/index.html", "text/html");
+  });
 
-    server.serveStatic("/", LittleFS, "/");
+  server.serveStatic("/", LittleFS, "/");
+  server.begin();
 
-    // Start server
-    server.begin(); 
-
-    runstartTime = millis();
-    reversestartTime = micros();
-    samplingstartTime = micros(); // Add a small 17uS offset to sampling start time to prevent interference with other operations
+  runstartTime = millis();
+  reversestartTime = micros();
+  samplingstartTime = micros();
 }
+
+unsigned long lastReconnectAttempt = 0;
+const unsigned long reconnectInterval = 10000; // 10s
 
 void loop()
 {
-  dnsServer.processNextRequest(); // Handle DNS queries
+ if (WiFi.status() != WL_CONNECTED) {
+    unsigned long currentMillis = millis();
+    if (currentMillis - lastReconnectAttempt >= reconnectInterval) {
+      Serial.println("Reconnecting to WiFi...");
+      WiFi.disconnect();
+      WiFi.reconnect();
+      lastReconnectAttempt = currentMillis;
+    }
+  }
+
+  //dnsServer.processNextRequest(); // Handle DNS queries
   ws.cleanupClients();
 
-  static unsigned long lastDnsProcess = 0;
-  if (millis() - lastDnsProcess > 10) {
-      dnsServer.processNextRequest();
-      lastDnsProcess = millis();
-  }
+  // static unsigned long lastDnsProcess = 0;
+  // if (millis() - lastDnsProcess > 10) {
+  //     dnsServer.processNextRequest();
+  //     lastDnsProcess = millis();
+  // }
 
   currentTime = micros();
   currentTimeMillis = millis();
