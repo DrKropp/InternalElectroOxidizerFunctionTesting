@@ -62,8 +62,8 @@ String message = "";
 String runState = "FALSE";
 
 String FValue1 = "14"; // OUTPUT VOLTAGE
-String FValue2 = "4000"; // FORWARD TIME
-String RValue2 = "4000"; // REVERSE TIME
+String FValue2 = "100"; // FORWARD TIME
+String RValue2 = "100"; // REVERSE TIME
 String FValue3 = "15"; // FOWARD CURRENT
 String RValue3 = "15"; // REVERSE CURRENT
 
@@ -564,7 +564,7 @@ void loop()
         // Read data from ADC
         if (analogContinuousRead(&result, 0))
         {
-          analogContinuousStop(); // Stop ADC Continuous conversions to have more time to process (print) the data
+          //analogContinuousStop(); // Stop ADC Continuous conversions to have more time to process (print) the data
 
           uint32_t current_mV = result[0].avg_read_mvolts;
           
@@ -621,7 +621,7 @@ void loop()
 
           //Serial.print(">SOADC:"); // Send formatted serial output to Teleplot serial data plotter
           //Serial.println(result[0].avg_read_mvolts);
-          analogContinuousStart(); // Start ADC conversions and wait for callback function to set adc_conversion_done flag to true
+          //analogContinuousStart(); // Start ADC conversions and wait for callback function to set adc_conversion_done flag to true
         }
         else
         {
