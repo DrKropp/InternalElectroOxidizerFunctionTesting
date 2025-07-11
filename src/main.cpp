@@ -63,7 +63,9 @@ String runState = "FALSE";
 
 String FValue1 = "14"; // OUTPUT VOLTAGE
 String FValue2 = "100"; // FORWARD TIME
+uint16_t ForwardTimeInt = 100; // FORWARD TIME in mS
 String RValue2 = "100"; // REVERSE TIME
+uint16_t ReverseTimeInt = 100; // REVERSE TIME in mS
 String FValue3 = "15"; // FOWARD CURRENT
 String RValue3 = "15"; // REVERSE CURRENT
 
@@ -346,7 +348,8 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
     }
     if (message.indexOf("2F") >= 0) {
       FValue2 = message.substring(2);
-      dutyCycle2F = map(FValue2.toInt(), 0, 100, 0, 255);
+      ForwardTimeInt = FValue2.toInt();
+      dutyCycle2F = map(ForwardTimeInt, 0, 100, 0, 255);
       //Serial.println(dutyCycle2F);
       Serial.println(getValues());
       notifyClients(getValues());
@@ -354,7 +357,8 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
     }
     if (message.indexOf("2R") >= 0) {
       RValue2 = message.substring(2);
-      dutyCycle2R = map(RValue2.toInt(), 0, 100, 0, 255);
+      ReverseTimeInt = RValue2.toInt();
+      dutyCycle2R = map(ReverseTimeInt, 0, 100, 0, 255);
       //Serial.println(dutyCycle2R);
       Serial.println(getValues());
       notifyClients(getValues());
@@ -539,14 +543,14 @@ void loop()
     }
 
     if(outputDirection == false){ // Runs when output direction is forward
-      if (currentTime - reversestartTime >= FValue2.toInt() * 1000) // Non-Blocking time based control loop for reversing current direction
+      if (currentTime - reversestartTime >= ForwardTimeInt * 1000) // Non-Blocking time based control loop for reversing current direction
       {
         reversestartTime = currentTime;
         outputDirection = !outputDirection;                // Reverse the output direction variable
         digitalWrite(outputDirectionPin, outputDirection); // Change the output direction
       }
     } else { // Runs when output direction is reverse
-      if (currentTime - reversestartTime >= RValue2.toInt() * 1000) // Non-Blocking time based control loop for reversing current direction
+      if (currentTime - reversestartTime >= ReverseTimeInt * 1000) // Non-Blocking time based control loop for reversing current direction
       {
         reversestartTime = currentTime;
         outputDirection = !outputDirection;                // Reverse the output direction variable
