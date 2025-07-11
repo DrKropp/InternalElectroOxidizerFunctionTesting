@@ -13,12 +13,6 @@
         <h1>Control Settings</h1>
     </div>
     <div class="content">
-        <div class="top-card">
-            <h2>Enable Output</h2>
-            <p class="state">Output: <span id="state">OFF</span></p>
-            <button id="button" class="button">Toggle</button>
-        </div>
-        <br>
         <div class="card-grid">
             <div class="card" onclick="selectCard(this)" id="card1">
                 <p class="card-title">Voltage</p>
@@ -31,7 +25,6 @@
                 <button id="seconds" class="timing-toggle" onclick="toggleTiming(this)">S</button>
                 <button id="milliseconds" class="timing-toggle timing-selected" onclick="toggleTiming(this)">mS</button>
             </div>
-
             <!-- <div class="card" onclick="selectCard(this)" id="card3">
                 <p class="card-title">Current</p>
                 <p class="state">Foward: +<span id="FValue3" data-min="10" data-max="26" data-step="0.1">15</span> A</p>
@@ -53,6 +46,17 @@
                 </div>
             </div>
             <button id="update-button" class="button">Update Value</button>
+        </div>
+        <div class="top-grid">
+            <div class="display-data">
+                <p class="state">Peak Current: +<span id="peakPositiveCurrent">0</span> | -<span id="peakNegativeCurrent">0</span></p>
+                <p class="state">Avg. Current: +<span id="averagePositiveCurrent">0</span> | -<span id="averageNegativeCurrent">0</span></p>
+                <p class="state">Peak Voltage: +<span id="peakPositiveVoltage">0</span> | -<span id="peakNegativeVoltage">0</span></p>
+                <p class="state">Avg. Voltage: +<span id="averagePositiveVoltage">0</span> | -<span id="averageNegativeVoltage">0</span></p>
+            </div>
+            <div class="top-card" id="toggle-card">
+                <p class="state">Output: <span id="state">OFF</span></p>
+            </div>
         </div>
     </div>
     <script src="script.js"></script>

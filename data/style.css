@@ -22,21 +22,15 @@ html {
   .topnav {
     overflow: hidden;
     background-color: #0A1128;
+    margin-bottom: 5px;
   }
   body {
     margin: 0;
   }
   .content {
-    padding: 20px;
+    padding: 10px;
   }
-  .top-card {
-    border-radius: 10px;
-    box-shadow: 2px 2px 12px 1px rgba(140,140,140,.5);
-    padding:10px;
-    text-align: center;
-    max-width: 680px;
-    margin: 0 auto;
-  }
+
   .card-grid {
     max-width: 700px;
     margin: 0 auto;
@@ -219,3 +213,32 @@ html {
     box-shadow: 2px 2px 12px 1px rgba(0, 0, 0, 0.5);
   }
 
+  .top-grid {
+    grid-gap: 10px;
+    justify-content: center;
+    margin: 0px auto;
+    max-width: 700px;
+    margin-top:25px;
+    width: 100%;
+  }
+
+  .display-data {
+    border-radius: 10px;
+    background-color: #ffffff;
+    box-shadow: 2px 2px 12px 1px rgba(70, 70, 70, 0.5);
+    padding-top: 5px;
+    padding-bottom: 5px;
+    margin-bottom: 15px;;
+  }
+  .top-card {
+    border-radius: 10px;
+    box-shadow: 2px 2px 12px 1px rgba(140,140,140,.5);
+    padding:10px;
+    text-align: center;
+    cursor: pointer;
+    text-align: center;
+    display:flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+  }
