@@ -39,18 +39,18 @@ Software To Do (TK):
 // Replace with your network credentials
 // const char *ssid = "ExcitonClean";
 // const char *password = "sunnycarrot023";
-const char *hostname = "ESP32S3WebServer";
-const char *custom_ssid = "OrinTech EO-3";
-
+const char *ssid = "ekotestbox01";  
+const char *password = "myvoiceismypassword"; 
+const char *hostname = "OrinTechBox01";
 // DNS server
 const byte DNS_PORT = 53;
 DNSServer dnsServer;
 
-// AP Config
-IPAddress apIP(192, 168, 4, 1);
-IPAddress netMsk(255, 255, 255, 0);
-char ap_ssid[32] = "OrinTechE0";
-String ap_password = "EO-3PasswordField";
+// AP Config (Unused after switching to raspberry pi connect)
+// IPAddress apIP(192, 168, 4, 1);
+// IPAddress netMsk(255, 255, 255, 0);
+// char ap_ssid[32] = "OrinTechE0";
+// String ap_password = "EO-3PasswordField";
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80); //TK Change to port 443 for secure network
@@ -62,8 +62,8 @@ String message = "";
 String runState = "FALSE";
 
 String FValue1 = "14"; // OUTPUT VOLTAGE
-String FValue2 = "20"; // FORWARD TIME
-String RValue2 = "40"; // REVERSE TIME
+String FValue2 = "4000"; // FORWARD TIME
+String RValue2 = "4000"; // REVERSE TIME
 String FValue3 = "15"; // FOWARD CURRENT
 String RValue3 = "15"; // REVERSE CURRENT
 
@@ -77,6 +77,22 @@ int dutyCycle2F;
 int dutyCycle2R;
 int dutyCycle3F;
 int dutyCycle3R;
+
+// Output variables
+float outputCurrent = 0.0;  // Amps
+float outputVoltage = 0.0;  // Volts
+
+// Current and Voltage readings
+float peakPositiveCurrent = 0.0;
+float peakNegativeCurrent = 0.0;
+float averagePositiveCurrent = 0.0;
+float averageNegativeCurrent = 0.0;
+float peakPositiveVoltage = 0.0;
+float peakNegativeVoltage = 0.0;
+float averagePositiveVoltage = 0.0;
+float averageNegativeVoltage = 0.0;
+
+
 
 //Json Variable to Hold Values
 JsonDocument controlValues;
@@ -92,7 +108,14 @@ controlValues["FValue2"] = String(FValue2);
 controlValues["RValue2"] = String(RValue2);
 controlValues["FValue3"] = String(FValue3);
 controlValues["RValue3"] = String(RValue3);
-
+controlValues["peakPositiveCurrent"] = String(peakPositiveCurrent, 3);
+controlValues["peakNegativeCurrent"] = String(peakNegativeCurrent, 3);
+controlValues["averagePositiveCurrent"] = String(averagePositiveCurrent, 3);
+controlValues["averageNegativeCurrent"] = String(averageNegativeCurrent, 3);
+controlValues["peakPositiveVoltage"] = String(peakPositiveVoltage);
+controlValues["peakNegativeVoltage"] = String(peakNegativeVoltage);
+controlValues["averagePositiveVoltage"] = String(averagePositiveVoltage);
+controlValues["averageNegativeVoltage"] = String(averageNegativeVoltage);
 
 String output;
 
@@ -100,6 +123,13 @@ controlValues.shrinkToFit();  // optional
 serializeJson(controlValues, output);
 return output;
 }
+
+// helper variables
+uint16_t samplesPerAverage = 50;
+float forwardSum = 0.0; // Sum of current readings for averaging
+float reverseSum = 0.0;
+uint16_t forwardCount = 0; // Count of current readings for averaging
+uint16_t reverseCount = 0; // Count of current readings for averaging
 
 // Define some GPIO connections between ESP32-S3 and DRV8706H-Q1
 const uint8_t VoltControl_PWM_Pin = 8; // GPIO 8 PWM Output will adjust 24V power supply output, PWM Setting=TargetVolts/TargetVoltsConversionFactor
@@ -112,15 +142,15 @@ const uint8_t DRVOffPin = 16;          // Disable DRV8706H-Q1 drive output witho
 const uint8_t nFaultPin = 17;          // Fault indicator output pulled low to indicate fault condition
 
 // Structures for rapid ADC reading
-#define CONVERSIONS_PER_PIN 5
+#define CONVERSIONS_PER_PIN 500
 uint8_t SO_Pin[] = {2};                   // Analog signal proportional to output current, values below VCC/2 for negative current
-volatile bool adc_coversion_done = false; // Flag which will be set in ISR when conversion is done
+volatile bool adc_conversion_done = false; // Flag which will be set in ISR when conversion is done
 adc_continuous_data_t *result = NULL;     // Result structure for ADC Continuous reading
 
 // ISR Function that will be triggered when ADC conversion is done
 void ARDUINO_ISR_ATTR adcComplete()
 {
-  adc_coversion_done = true;
+  adc_conversion_done = true;
 }
 
 // Define other ESP32-S3 GPIO connections
@@ -162,6 +192,12 @@ const float TargetVoltsConversionFactor = 0.0301686059427937; // Slope Value fro
 
 bool testAttach = false; // Did the forward pwm pin successfully attach?
 
+// ADC Constants
+//const float CURRENT_ZERO_POINT = 2019;  
+//const float SLOPE = 51.1f;     
+const float CURRENT_ZERO_POINT = 2045; // From calibration 7/5/25
+const float SLOPE = 52.1f;     // From calibration 7/5/25
+
 // put function declarations here:
 
 // Initialize WiFi
@@ -176,24 +212,82 @@ bool testAttach = false; // Did the forward pwm pin successfully attach?
 //   Serial.println(WiFi.localIP());
 // }
 
-void setupAP() {
-    // uint8_t mac[6];
-    // WiFi.macAddress(mac);
-    // snprintf(ap_ssid, sizeof(ap_ssid), "esp_%02X%02X%02X%02X%02X%02X", 
-    //         mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+// void setupAP() {
+//     // uint8_t mac[6];
+//     // WiFi.macAddress(mac);
+//     // snprintf(ap_ssid, sizeof(ap_ssid), "esp_%02X%02X%02X%02X%02X%02X", 
+//     //         mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
-    strncpy(ap_ssid, custom_ssid, sizeof(ap_ssid));
+//     strncpy(ap_ssid, custom_ssid, sizeof(ap_ssid));
 
-    WiFi.softAPConfig(apIP, apIP, netMsk);
-    WiFi.softAP(ap_ssid, ap_password.c_str());
+//     WiFi.softAPConfig(apIP, apIP, netMsk);
+//     WiFi.softAP(ap_ssid, ap_password.c_str());
     
-    dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
-    dnsServer.start(DNS_PORT, "*", apIP);
+//     dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
+//     dnsServer.start(DNS_PORT, "*", apIP);
     
-    Serial.print("Setting up AP: ");
-    Serial.println(ap_ssid);
-    Serial.print("AP IP: ");
-    Serial.println(WiFi.softAPIP());
+//     Serial.print("Setting up AP: ");
+//     Serial.println(ap_ssid);
+//     Serial.print("AP IP: ");
+//     Serial.println(WiFi.softAPIP());
+// }
+
+// void initWiFi() {
+//   WiFi.setHostname(hostname);
+//   WiFi.mode(WIFI_STA);
+//   WiFi.begin(ssid, password);
+//   Serial.print("Connecting to WiFi ..");
+  
+//   int attempts = 0;
+//   while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+//     Serial.print('.');
+//     delay(500);
+//     attempts++;
+//   }
+  
+//   if (WiFi.status() == WL_CONNECTED) {
+//     Serial.println("\nConnected! Hostname: " + String(hostname));
+//     Serial.println("IP address: " + WiFi.localIP().toString());
+//   } else {
+//     Serial.println("\nFailed to connect to WiFi!");
+//   }
+// }
+
+// void scanNetworks() {
+//   Serial.println("Scanning networks...");
+//   int n = WiFi.scanNetworks();
+//   for (int i = 0; i < n; i++) {
+//     Serial.printf("%s (%d dBm)\n", WiFi.SSID(i).c_str(), WiFi.RSSI(i));
+//   }
+// }
+
+void initWiFi() {
+  WiFi.setHostname(hostname);
+  WiFi.mode(WIFI_STA);
+  delay(100);
+
+  //scanNetworks(); // Scan for available networks
+
+  WiFi.begin(ssid, password);
+  Serial.println("\nConnecting to WiFi...");
+
+  unsigned long startAttemptTime = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 20000) { // 20s timeout
+    Serial.printf("WiFi Status: %d\n", WiFi.status());
+    delay(500);
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nConnected!");
+    Serial.print("SSID: "); Serial.println(WiFi.SSID());
+    Serial.print("IP: "); Serial.println(WiFi.localIP());
+  } else {
+    Serial.println("\nFailed to connect!");
+    Serial.println("Possible causes:");
+    Serial.println("- Wrong SSID/password");
+    Serial.println("- Hotspot not in 2.4GHz mode");
+    Serial.println("- Weak signal");
+  }
 }
 
 // Initialize LittleFS
@@ -227,6 +321,17 @@ void notifyClients(String values) {
   ws.textAll(values);
 }
 
+void resetPeakValues() {
+  peakPositiveCurrent = 0.0;
+  peakNegativeCurrent = 0.0;
+  averagePositiveCurrent = 0.0;
+  averageNegativeCurrent = 0.0;
+  peakPositiveVoltage = FValue1.toFloat();
+  peakNegativeVoltage = FValue1.toFloat();
+  averagePositiveVoltage = FValue1.toFloat();
+  averageNegativeVoltage = FValue1.toFloat();
+}
+
 void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
   AwsFrameInfo *info = (AwsFrameInfo*)arg;
   if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
@@ -244,6 +349,7 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
       //Serial.println(dutyCycle1F);
       Serial.println(getValues());
       notifyClients(getValues());
+      resetPeakValues();
     }
     if (message.indexOf("2F") >= 0) {
       FValue2 = message.substring(2);
@@ -251,6 +357,7 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
       //Serial.println(dutyCycle2F);
       Serial.println(getValues());
       notifyClients(getValues());
+      resetPeakValues();
     }
     if (message.indexOf("2R") >= 0) {
       RValue2 = message.substring(2);
@@ -258,6 +365,7 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
       //Serial.println(dutyCycle2R);
       Serial.println(getValues());
       notifyClients(getValues());
+      resetPeakValues();
     }
     if (message.indexOf("3F") >= 0) {
       FValue3 = message.substring(2);
@@ -265,6 +373,7 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
       //Serial.println(dutyCycle3F);
       Serial.println(getValues());
       notifyClients(getValues());
+      resetPeakValues();
     }
     if (message.indexOf("3R") >= 0) {
       RValue3 = message.substring(2);
@@ -272,6 +381,7 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
       //Serial.println(dutyCycle3R);
       Serial.println(getValues());
       notifyClients(getValues());
+      resetPeakValues();
     }
     if (strcmp((char*)data, "getValues") == 0) {
       notifyClients(getValues());
@@ -322,108 +432,99 @@ String processor(const String &var)
   return String();
 }
 
-void setup() // Runs once after reset
-{
-  // Initialize Serial communication
+void setup() {
   Serial.begin(460800);
-  delay(5000); // Wait for serial monitor to be ready
-  // Serial.println("startup OK");
+  delay(5000);
   rgbLedWrite(RGBLedPin, 0, 55, 0);
 
-  // Enable input and output pins
-  testAttach = ledcAttach(VoltControl_PWM_Pin, PWMFreq, outputBits); // Pin 8 to output PWM and control output voltage
-  if (testAttach == false)
-  {
-    Serial.println("Error in RSP1000-24 Control");
-  }
+  testAttach = ledcAttach(VoltControl_PWM_Pin, PWMFreq, outputBits);
+  if (!testAttach) Serial.println("Error in RSP1000-24 Control");
 
   pinMode(outputEnablePin, OUTPUT);
   pinMode(outputDirectionPin, OUTPUT);
   pinMode(nSleepPin, OUTPUT);
   pinMode(DRVOffPin, OUTPUT);
-  pinMode(nFaultPin, INPUT); // Fault indicator output pulled low to indicate fault condition, requires pullup resistor
+  pinMode(nFaultPin, INPUT);
 
-  analogContinuousSetWidth(12);                                          // Set the resolution to 9-12 bits (default is 12 bits)
-  analogContinuousSetAtten(ADC_11db);                                    // Optional: Set different attenaution (default is ADC_11db)
-  analogContinuous(SO_Pin, 1, CONVERSIONS_PER_PIN, 20000, &adcComplete); // Setup ADC Continuous, how many conversions to average, sampling frequency, callback function
-  analogContinuousStart();                                               // Start ADC Continuous conversions
+  analogContinuousSetWidth(12);
+  analogContinuousSetAtten(ADC_11db);
+  analogContinuous(SO_Pin, 1, CONVERSIONS_PER_PIN, 20000, &adcComplete);
+  analogContinuousStart();
 
   pinMode(testButton, INPUT_PULLUP);
 
-  // Assert all pins to safe starting values
-  digitalWrite(nSleepPin, LOW);          // Send sleep signal
-  digitalWrite(DRVOffPin, HIGH);         // Send output OFF signal
-  digitalWrite(outputEnablePin, LOW);    // Initialize EN signal
-  digitalWrite(outputDirectionPin, LOW); // Initialize PH signal
+  // Initialize to safe state
+  digitalWrite(nSleepPin, LOW);
+  digitalWrite(DRVOffPin, HIGH);
+  digitalWrite(outputEnablePin, LOW);
+  digitalWrite(outputDirectionPin, LOW);
 
-  // At this point the DRV8706H-Q1 Should be asleep with no activity on the H-Bridge mosfets
+  ledcWrite(VoltControl_PWM_Pin, VoltControl_PWM);
+  rgbLedWrite(RGBLedPin, 0, 23, 10);
+  delay(100);
 
-  ledcWrite(VoltControl_PWM_Pin, VoltControl_PWM); // Set the RSP-1000-24 to a low but stable output voltage, about 9V
-  Serial.print("RSP1000-24 Voltage Set to ");
-  Serial.print(VoltControl_PWM * TargetVoltsConversionFactor);
-  Serial.println("V");
-  rgbLedWrite(RGBLedPin, 0, 23, 10); // Blue to show that RSP-1000-24 voltage is being set
-  delay(100);                        // wait 1 second for power supply to stabilize
-
-  digitalWrite(nSleepPin, HIGH); // Wake the DRV8706 but don't output any drive signals to the H-Bridge
+  digitalWrite(nSleepPin, HIGH);
   Serial.println("DRV8706 Waking Up!");
-  rgbLedWrite(RGBLedPin, 0, 23, 0); // Green for 1 second to show that DRV8706 is awake
+  rgbLedWrite(RGBLedPin, 0, 23, 0);
   delay(100);
 
-  digitalWrite(DRVOffPin, LOW); // Enable outputs but don't activate them
+  digitalWrite(DRVOffPin, LOW);
   Serial.println("DRV8706 Output Enabled! Outputs off...");
-  rgbLedWrite(48, 23, 23, 23); // White for 1 second to show that DRV8706 outputs are enabled
+  rgbLedWrite(48, 23, 23, 23);
   delay(100);
 
-  rgbLedWrite(RGBLedPin, 0, 0, 0); // LED off when setup completed
+  rgbLedWrite(RGBLedPin, 0, 0, 0);
 
-  // initWiFi();
-  setupAP();
+  // Initialize WiFi and filesystem
+  initWiFi();
+  initFS();
+  initWebSocket();
 
-    // Print ESP Local IP Address
-    //Serial.println(WiFi.localIP());
-
-    initFS();
-    initWebSocket();
-
-    // Captive Portal Handler
-    server.onNotFound([](AsyncWebServerRequest *request){
-    
-      // Always redirect if not requesting AP IP
-      if (!isIp(request->host()) || request->host() != apIP.toString()) {
-        String redirectUrl = "http://" + apIP.toString() + "/";
-        request->redirect(redirectUrl);
-      } else {
-        // Serve index.html for all paths under AP IP
-        request->send(LittleFS, "/index.html", "text/html");
-      }
+  server.onNotFound([](AsyncWebServerRequest *request){
+    request->send(LittleFS, "/index.html", "text/html");
   });
 
-    // Web Server Root URL
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-      request->send(LittleFS, "/index.html", "text/html");
-    });
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(LittleFS, "/index.html", "text/html");
+  });
 
-    server.serveStatic("/", LittleFS, "/");
+  server.serveStatic("/", LittleFS, "/");
+  server.begin();
 
-    // Start server
-    server.begin(); 
-
-    runstartTime = millis();
-    reversestartTime = micros();
-    samplingstartTime = micros(); // Add a small 17uS offset to sampling start time to prevent interference with other operations
+  runstartTime = millis();
+  reversestartTime = micros();
+  samplingstartTime = micros();
+  resetPeakValues(); // Reset peak values at startup
 }
+
+unsigned long lastReconnectAttempt = 0;
+const unsigned long reconnectInterval = 10000; // 10s
 
 void loop()
 {
-  dnsServer.processNextRequest(); // Handle DNS queries
+ if (WiFi.status() != WL_CONNECTED) {
+    unsigned long currentMillis = millis();
+    if (currentMillis - lastReconnectAttempt >= reconnectInterval) {
+      Serial.println("Reconnecting to WiFi...");
+      WiFi.disconnect();
+      WiFi.reconnect();
+      lastReconnectAttempt = currentMillis;
+    }
+  }
+  if(peakPositiveVoltage == 0.0){
+    float peakPositiveVoltage = FValue1.toFloat();
+    float peakNegativeVoltage = FValue1.toFloat();
+    float averagePositiveVoltage = FValue1.toFloat();
+    float averageNegativeVoltage = FValue1.toFloat();
+  }
+  //dnsServer.processNextRequest(); // Handle DNS queries
   ws.cleanupClients();
 
-  static unsigned long lastDnsProcess = 0;
-  if (millis() - lastDnsProcess > 10) {
-      dnsServer.processNextRequest();
-      lastDnsProcess = millis();
-  }
+  // static unsigned long lastDnsProcess = 0;
+  // if (millis() - lastDnsProcess > 10) {
+  //     dnsServer.processNextRequest();
+  //     lastDnsProcess = millis();
+  // }
 
   currentTime = micros();
   currentTimeMillis = millis();
@@ -489,20 +590,74 @@ void loop()
       }
     }
 
-    if (currentTime - samplingstartTime >= samplingTime)
+    if (currentTime - samplingstartTime >= samplingTime && currentTime >= 100000) // currentTime >= 100000 to avoid sampling at startup
     {
       samplingstartTime = currentTime;
-      if (adc_coversion_done == true)
+      if (adc_conversion_done == true)
       {
         // Set ISR flag back to false
-        adc_coversion_done = false;
+        adc_conversion_done = false;
         // Read data from ADC
         if (analogContinuousRead(&result, 0))
         {
           analogContinuousStop(); // Stop ADC Continuous conversions to have more time to process (print) the data
+
+          uint32_t current_mV = result[0].avg_read_mvolts;
+          
+         //outputCurrent = (((result[0].avg_read_mvolts/1000.0f)*(VOLTSTOCOUNTS))-CURRENT_ZERO_POINT)/SLOPE; // Convert mV to amps -> Amps = (ADCcount - VCC/2)/slope
+          outputCurrent = ((result[0].avg_read_raw)-CURRENT_ZERO_POINT)/SLOPE;
+
+          if(outputCurrent > peakPositiveCurrent && result[0].avg_read_raw > 100){ // Only update peak current if the reading is above a threshold to avoid noise
+            peakPositiveCurrent = outputCurrent;
+            notifyClients(getValues());
+          }
+          if(outputCurrent < peakNegativeCurrent && result[0].avg_read_raw > 100){
+            peakNegativeCurrent = outputCurrent;
+            notifyClients(getValues());
+          }
+
+          if(outputDirection == true && result[0].avg_read_raw > 100){ // Forward direction
+            if(forwardCount < samplesPerAverage){
+              forwardSum += outputCurrent; 
+              forwardCount++;
+            } else {
+              averagePositiveCurrent = forwardSum / samplesPerAverage; 
+              forwardSum = 0.0;
+              forwardCount = 0;
+            }
+          } else { // Reverse direction
+            if(reverseCount < samplesPerAverage && result[0].avg_read_raw > 100){
+              reverseSum += outputCurrent; 
+              reverseCount++;
+            } else {
+              averageNegativeCurrent = reverseSum / samplesPerAverage; 
+              reverseSum = 0.0;
+              reverseCount = 0;
+            }
+          }
+          // Serial.printf("\nADC PIN %d data:", result[0].pin);
+          // Serial.printf("\n   Avg raw value = %d", result[0].avg_read_raw);
+          // Serial.printf("\n   Avg millivolts value = %d", result[0].avg_read_mvolts);
+          // Serial.printf("\n   Avg Counts value = %f", ((result[0].avg_read_mvolts/1000.0f)*(VOLTSTOCOUNTS)));
+          // Serial.printf("\n   Avg Amps value = %f", outputCurrent);
+
+          
+          //float rawCounts = (result[0].avg_read_mvolts / 1000.0f) * (ADC_MAX_COUNTS / ADC_REF_VOLTAGE);
+
+          //outputCurrent = (rawCounts - CURRENT_ZERO_POINT) / SLOPE; // Convert raw counts to amps
+
           // Serial.print(">SOADC:"); // Send formatted serial output to Teleplot serial data plotter
+          // Serial.println(outputCurrent);
+
+          // Serial.print(">SOADC2:");
+          // Serial.println(result[0].avg_read_raw);
+
+          // Serial.print(">SOADC3:");
           // Serial.println(result[0].avg_read_mvolts);
-          analogContinuousStart(); // Start ADC conversions and wait for callback function to set adc_coversion_done flag to true
+
+          //Serial.print(">SOADC:"); // Send formatted serial output to Teleplot serial data plotter
+          //Serial.println(result[0].avg_read_mvolts);
+          analogContinuousStart(); // Start ADC conversions and wait for callback function to set adc_conversion_done flag to true
         }
         else
         {
