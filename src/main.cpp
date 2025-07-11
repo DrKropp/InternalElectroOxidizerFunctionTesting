@@ -92,36 +92,31 @@ float peakNegativeVoltage = 0.0;
 float averagePositiveVoltage = 0.0;
 float averageNegativeVoltage = 0.0;
 
-
-
 //Json Variable to Hold Values
 JsonDocument controlValues;
 
 //Get Values
 String getValues(){
 
-// controlValues["runState"] = runState;
-// controlValues["targetVolts"] = targetVolts;
-// controlValues["reverseTime"] = RValue2;
-controlValues["FValue1"] = String(FValue1);
-controlValues["FValue2"] = String(FValue2);
-controlValues["RValue2"] = String(RValue2);
-controlValues["FValue3"] = String(FValue3);
-controlValues["RValue3"] = String(RValue3);
-controlValues["peakPositiveCurrent"] = String(peakPositiveCurrent, 3);
-controlValues["peakNegativeCurrent"] = String(peakNegativeCurrent, 3);
-controlValues["averagePositiveCurrent"] = String(averagePositiveCurrent, 3);
-controlValues["averageNegativeCurrent"] = String(averageNegativeCurrent, 3);
-controlValues["peakPositiveVoltage"] = String(peakPositiveVoltage);
-controlValues["peakNegativeVoltage"] = String(peakNegativeVoltage);
-controlValues["averagePositiveVoltage"] = String(averagePositiveVoltage);
-controlValues["averageNegativeVoltage"] = String(averageNegativeVoltage);
+  controlValues["FValue1"] = String(FValue1);
+  controlValues["FValue2"] = String(FValue2);
+  controlValues["RValue2"] = String(RValue2);
+  controlValues["FValue3"] = String(FValue3);
+  controlValues["RValue3"] = String(RValue3);
+  controlValues["peakPositiveCurrent"] = String(peakPositiveCurrent, 3);
+  controlValues["peakNegativeCurrent"] = String(peakNegativeCurrent, 3);
+  controlValues["averagePositiveCurrent"] = String(averagePositiveCurrent, 3);
+  controlValues["averageNegativeCurrent"] = String(averageNegativeCurrent, 3);
+  controlValues["peakPositiveVoltage"] = String(peakPositiveVoltage);
+  controlValues["peakNegativeVoltage"] = String(peakNegativeVoltage);
+  controlValues["averagePositiveVoltage"] = String(averagePositiveVoltage);
+  controlValues["averageNegativeVoltage"] = String(averageNegativeVoltage);
 
-String output;
+  String output;
 
-controlValues.shrinkToFit();  // optional
-serializeJson(controlValues, output);
-return output;
+  controlValues.shrinkToFit();  // optional
+  serializeJson(controlValues, output);
+  return output;
 }
 
 // helper variables
@@ -175,12 +170,10 @@ float TargetVolts = 18.0;
 // Variables used for timing
 uint32_t currentTime = 0;       // Store the current time in uS
 uint32_t currentTimeMillis = 0; // Store the current time in mS
-uint32_t runstartTime = 0;      // Store the start time
-uint32_t runTime = 3600000 * 8; // mS time to run the system after button press. Currently 8 hours
 uint32_t reversestartTime = 0;  // Store the reversal cycle start time
 uint32_t reverseTimeUS = 40000;   // uS time between reversals
 uint32_t samplingstartTime = 0; // Store the sampling start time
-uint32_t samplingTime = 100;    // uS between taking current measurements
+uint32_t samplingTime = 1000;    // uS between taking current measurements
 
 // Variables for storing sensor outputs
 float averageoutputCurrent = 0.0;   // Converted average current value
@@ -491,7 +484,6 @@ void setup() {
   server.serveStatic("/", LittleFS, "/");
   server.begin();
 
-  runstartTime = millis();
   reversestartTime = micros();
   samplingstartTime = micros();
   resetPeakValues(); // Reset peak values at startup
@@ -511,51 +503,23 @@ void loop()
       lastReconnectAttempt = currentMillis;
     }
   }
-  if(peakPositiveVoltage == 0.0){
-    float peakPositiveVoltage = FValue1.toFloat();
-    float peakNegativeVoltage = FValue1.toFloat();
-    float averagePositiveVoltage = FValue1.toFloat();
-    float averageNegativeVoltage = FValue1.toFloat();
-  }
-  //dnsServer.processNextRequest(); // Handle DNS queries
-  ws.cleanupClients();
 
-  // static unsigned long lastDnsProcess = 0;
-  // if (millis() - lastDnsProcess > 10) {
-  //     dnsServer.processNextRequest();
-  //     lastDnsProcess = millis();
-  // }
+  if(peakPositiveVoltage == 0.0){
+    peakPositiveVoltage = FValue1.toFloat();
+    peakNegativeVoltage = FValue1.toFloat();
+    averagePositiveVoltage = FValue1.toFloat();
+    averageNegativeVoltage = FValue1.toFloat();
+  }
+
+  ws.cleanupClients();
 
   currentTime = micros();
   currentTimeMillis = millis();
-
-
 
   if (isRunning == false)
   {
     rgbLedWrite(48, 0, 0, 0); // led off
     digitalWrite(outputEnablePin, LOW); // Deactivate outputs
-    // if (digitalRead(testButton) == LOW) // Watch for the button press, then wake the DRV8706, enable the outputs, then drive the output
-    // {
-    //   VoltControl_PWM = round(TargetVolts / TargetVoltsConversionFactor);
-    //   ledcWrite(VoltControl_PWM_Pin, VoltControl_PWM); // Set the RSP1000-24 output voltage to the target value
-    //   Serial.print("FValue1 = ");
-    //   Serial.println(VoltControl_PWM * TargetVoltsConversionFactor);
-    //   digitalWrite(outputEnablePin, HIGH); // Activate Outputs !Possible Danger! Should see PVDD on output!
-      
-
-      
-    //   isRunning = true;
-    //   delay(250); // Need to implement a more robust solution for user holding the button down.
-    // }
-  }
-
-  if (currentTimeMillis - runstartTime >= runTime) // Turn off the output after the run is over
-  {
-    digitalWrite(outputEnablePin, LOW);
-    // Serial.println("Test is over, deactivating outputs");
-    rgbLedWrite(48, 0, 0, 0); // led off
-    isRunning = false;
   }
 
   if (isRunning == true)
