@@ -33,6 +33,11 @@ function initWebSocket() {
     websocket.onopen = onOpen;
     websocket.onclose = onClose;
     websocket.onmessage = onMessage;
+    setInterval(() =>  {
+        if(websocket.readyState === websocket.OPEN){
+            websocket.send("getValues");
+        }
+    }, 5000); // reqs data every 5 seconds
 }
 
 function onOpen(event) {

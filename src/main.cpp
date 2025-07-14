@@ -66,8 +66,6 @@ String FValue2 = "100"; // FORWARD TIME
 uint16_t ForwardTimeInt = 100; // FORWARD TIME in mS
 String RValue2 = "100"; // REVERSE TIME
 uint16_t ReverseTimeInt = 100; // REVERSE TIME in mS
-String FValue3 = "15"; // FOWARD CURRENT
-String RValue3 = "15"; // REVERSE CURRENT
 
 String targetVolts = "0.0"; // targetVolts holds target voltage 10.0<TargetVolts<26.0 0.1V resolution
 //String RValue2 = "0"; // reverseTime sets the reversal time in mS
@@ -103,8 +101,6 @@ String getValues(){
   controlValues["FValue1"] = String(FValue1);
   controlValues["FValue2"] = String(FValue2);
   controlValues["RValue2"] = String(RValue2);
-  controlValues["FValue3"] = String(FValue3);
-  controlValues["RValue3"] = String(RValue3);
   controlValues["peakPositiveCurrent"] = String(peakPositiveCurrent, 3);
   controlValues["peakNegativeCurrent"] = String(peakNegativeCurrent, 3);
   controlValues["averagePositiveCurrent"] = String(averagePositiveCurrent, 3);
@@ -364,22 +360,6 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
       notifyClients(getValues());
       resetPeakValues();
     }
-    if (message.indexOf("3F") >= 0) {
-      FValue3 = message.substring(2);
-      dutyCycle3F = map(FValue3.toInt(), 0, 100, 0, 255);
-      //Serial.println(dutyCycle3F);
-      Serial.println(getValues());
-      notifyClients(getValues());
-      resetPeakValues();
-    }
-    if (message.indexOf("3R") >= 0) {
-      RValue3 = message.substring(2);
-      dutyCycle3R = map(RValue3.toInt(), 0, 100, 0, 255);
-      //Serial.println(dutyCycle3R);
-      Serial.println(getValues());
-      notifyClients(getValues());
-      resetPeakValues();
-    }
     if (strcmp((char*)data, "getValues") == 0) {
       notifyClients(getValues());
     }
@@ -431,7 +411,7 @@ String processor(const String &var)
 
 void setup() {
   Serial.begin(460800);
-  delay(5000);
+  //delay(5000);
   rgbLedWrite(RGBLedPin, 0, 55, 0);
 
   testAttach = ledcAttach(VoltControl_PWM_Pin, PWMFreq, outputBits);
@@ -456,19 +436,19 @@ void setup() {
   digitalWrite(outputEnablePin, LOW);
   digitalWrite(outputDirectionPin, LOW);
 
-  ledcWrite(VoltControl_PWM_Pin, VoltControl_PWM);
-  rgbLedWrite(RGBLedPin, 0, 23, 10);
-  delay(100);
+  // ledcWrite(VoltControl_PWM_Pin, VoltControl_PWM);
+  // rgbLedWrite(RGBLedPin, 0, 23, 10);
+  // delay(100);
 
   digitalWrite(nSleepPin, HIGH);
   Serial.println("DRV8706 Waking Up!");
   rgbLedWrite(RGBLedPin, 0, 23, 0);
-  delay(100);
+  //delay(100);
 
   digitalWrite(DRVOffPin, LOW);
   Serial.println("DRV8706 Output Enabled! Outputs off...");
   rgbLedWrite(48, 23, 23, 23);
-  delay(100);
+  //delay(100);
 
   rgbLedWrite(RGBLedPin, 0, 0, 0);
 
@@ -568,7 +548,7 @@ void loop()
         // Read data from ADC
         if (analogContinuousRead(&result, 0))
         {
-          //analogContinuousStop(); // Stop ADC Continuous conversions to have more time to process (print) the data
+          analogContinuousStop(); // Stop ADC Continuous conversions to have more time to process (print) the data
 
           uint32_t current_mV = result[0].avg_read_mvolts;
           
@@ -625,7 +605,7 @@ void loop()
 
           //Serial.print(">SOADC:"); // Send formatted serial output to Teleplot serial data plotter
           //Serial.println(result[0].avg_read_mvolts);
-          //analogContinuousStart(); // Start ADC conversions and wait for callback function to set adc_conversion_done flag to true
+          analogContinuousStart(); // Start ADC conversions and wait for callback function to set adc_conversion_done flag to true
         }
         else
         {
