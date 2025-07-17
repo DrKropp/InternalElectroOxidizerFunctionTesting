@@ -26,6 +26,7 @@ Software To Do (TK):
 
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WiFiMulti.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include "LittleFS.h"
@@ -42,6 +43,9 @@ Software To Do (TK):
 const char *ssid = "ekotestbox01";  
 const char *password = "myvoiceismypassword"; 
 const char *hostname = "OrinTechBox01";
+
+WiFiMulti wifiMulti;
+
 // DNS server
 const byte DNS_PORT = 53;
 DNSServer dnsServer;
@@ -181,86 +185,93 @@ uint16_t SO_ADC;                    // raw, unscaled current output reading
 // Some other constants
 const float TargetVoltsConversionFactor = 0.0301686059427937; // Slope Value from calibration 16Jan2025
 
-bool testAttach = false; // Did the forward pwm pin successfully attach?
-
 // ADC Constants
 //const float CURRENT_ZERO_POINT = 2019;  
 //const float SLOPE = 51.1f;     
 const float CURRENT_ZERO_POINT = 2045; // From calibration 7/5/25
 const float SLOPE = 52.1f;     // From calibration 7/5/25
 
-// put function declarations here:
+/* //put function declarations here:
 
-// Initialize WiFi
-// void initWiFi() {
-//   WiFi.mode(WIFI_STA);
-//   WiFi.begin(ssid, password);
-//   Serial.print("Connecting to WiFi ..");
-//   while (WiFi.status() != WL_CONNECTED) {
-//     Serial.print('.');
-//     delay(1000);
-//   }
-//   Serial.println(WiFi.localIP());
-// }
+Initialize WiFi
+void initWiFi() {
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to WiFi ..");
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print('.');
+    delay(1000);
+  }
+  Serial.println(WiFi.localIP());
+}
 
-// void setupAP() {
-//     // uint8_t mac[6];
-//     // WiFi.macAddress(mac);
-//     // snprintf(ap_ssid, sizeof(ap_ssid), "esp_%02X%02X%02X%02X%02X%02X", 
-//     //         mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+void setupAP() {
+    // uint8_t mac[6];
+    // WiFi.macAddress(mac);
+    // snprintf(ap_ssid, sizeof(ap_ssid), "esp_%02X%02X%02X%02X%02X%02X", 
+    //         mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
-//     strncpy(ap_ssid, custom_ssid, sizeof(ap_ssid));
+    strncpy(ap_ssid, custom_ssid, sizeof(ap_ssid));
 
-//     WiFi.softAPConfig(apIP, apIP, netMsk);
-//     WiFi.softAP(ap_ssid, ap_password.c_str());
+    WiFi.softAPConfig(apIP, apIP, netMsk);
+    WiFi.softAP(ap_ssid, ap_password.c_str());
     
-//     dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
-//     dnsServer.start(DNS_PORT, "*", apIP);
+    dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
+    dnsServer.start(DNS_PORT, "*", apIP);
     
-//     Serial.print("Setting up AP: ");
-//     Serial.println(ap_ssid);
-//     Serial.print("AP IP: ");
-//     Serial.println(WiFi.softAPIP());
-// }
-
-// void initWiFi() {
-//   WiFi.setHostname(hostname);
-//   WiFi.mode(WIFI_STA);
-//   WiFi.begin(ssid, password);
-//   Serial.print("Connecting to WiFi ..");
-  
-//   int attempts = 0;
-//   while (WiFi.status() != WL_CONNECTED && attempts < 20) {
-//     Serial.print('.');
-//     delay(500);
-//     attempts++;
-//   }
-  
-//   if (WiFi.status() == WL_CONNECTED) {
-//     Serial.println("\nConnected! Hostname: " + String(hostname));
-//     Serial.println("IP address: " + WiFi.localIP().toString());
-//   } else {
-//     Serial.println("\nFailed to connect to WiFi!");
-//   }
-// }
-
-// void scanNetworks() {
-//   Serial.println("Scanning networks...");
-//   int n = WiFi.scanNetworks();
-//   for (int i = 0; i < n; i++) {
-//     Serial.printf("%s (%d dBm)\n", WiFi.SSID(i).c_str(), WiFi.RSSI(i));
-//   }
-// }
+    Serial.print("Setting up AP: ");
+    Serial.println(ap_ssid);
+    Serial.print("AP IP: ");
+    Serial.println(WiFi.softAPIP());
+}
 
 void initWiFi() {
   WiFi.setHostname(hostname);
   WiFi.mode(WIFI_STA);
-  delay(100);
-
-  //scanNetworks(); // Scan for available networks
-
   WiFi.begin(ssid, password);
-  Serial.println("\nConnecting to WiFi...");
+  Serial.print("Connecting to WiFi ..");
+  
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+    Serial.print('.');
+    delay(500);
+    attempts++;
+  }
+  
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nConnected! Hostname: " + String(hostname));
+    Serial.println("IP address: " + WiFi.localIP().toString());
+  } else {
+    Serial.println("\nFailed to connect to WiFi!");
+  }
+}
+
+void scanNetworks() {
+  Serial.println("Scanning networks...");
+  int n = WiFi.scanNetworks();
+  for (int i = 0; i < n; i++) {
+    Serial.printf("%s (%d dBm)\n", WiFi.SSID(i).c_str(), WiFi.RSSI(i));
+  }
+} */
+
+void initWiFi() {
+  WiFi.setHostname(hostname);
+  WiFi.mode(WIFI_STA);
+    
+  // Add list of wifi networks
+  wifiMulti.addAP("ExcitonClean", "sunnycarrot023");
+  wifiMulti.addAP("ekotestbox01", "myvoiceismypassword");
+  wifiMulti.addAP("SandersWifi", "ISsignum12");
+
+  //WiFi.begin(ssid, password);
+  Serial.println("Connecting to WiFi...");
+
+  if(wifiMulti.run() == WL_CONNECTED) {
+    Serial.println("");
+    Serial.println("WiFi connected");
+    Serial.println("IP address: ");
+    Serial.println(WiFi.localIP());
+  }
 
   unsigned long startAttemptTime = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 20000) { // 20s timeout
@@ -411,10 +422,9 @@ String processor(const String &var)
 
 void setup() {
   Serial.begin(460800);
-  //delay(5000);
-  rgbLedWrite(RGBLedPin, 0, 55, 0);
+  delay(100);
 
-  testAttach = ledcAttach(VoltControl_PWM_Pin, PWMFreq, outputBits);
+  bool testAttach = ledcAttach(VoltControl_PWM_Pin, PWMFreq, outputBits);
   if (!testAttach) Serial.println("Error in RSP1000-24 Control");
 
   pinMode(outputEnablePin, OUTPUT);
@@ -422,13 +432,12 @@ void setup() {
   pinMode(nSleepPin, OUTPUT);
   pinMode(DRVOffPin, OUTPUT);
   pinMode(nFaultPin, INPUT);
+  pinMode(testButton, INPUT_PULLUP);
 
   analogContinuousSetWidth(12);
   analogContinuousSetAtten(ADC_11db);
   analogContinuous(SO_Pin, 1, CONVERSIONS_PER_PIN, 20000, &adcComplete);
   analogContinuousStart();
-
-  pinMode(testButton, INPUT_PULLUP);
 
   // Initialize to safe state
   digitalWrite(nSleepPin, LOW);
@@ -436,18 +445,12 @@ void setup() {
   digitalWrite(outputEnablePin, LOW);
   digitalWrite(outputDirectionPin, LOW);
 
-  // ledcWrite(VoltControl_PWM_Pin, VoltControl_PWM);
-  // rgbLedWrite(RGBLedPin, 0, 23, 10);
-  // delay(100);
-
   digitalWrite(nSleepPin, HIGH);
   Serial.println("DRV8706 Waking Up!");
-  rgbLedWrite(RGBLedPin, 0, 23, 0);
   //delay(100);
 
   digitalWrite(DRVOffPin, LOW);
   Serial.println("DRV8706 Output Enabled! Outputs off...");
-  rgbLedWrite(48, 23, 23, 23);
   //delay(100);
 
   rgbLedWrite(RGBLedPin, 0, 0, 0);
@@ -483,7 +486,7 @@ void loop()
     if (currentMillis - lastReconnectAttempt >= reconnectInterval) {
       Serial.println("Reconnecting to WiFi...");
       WiFi.disconnect();
-      WiFi.reconnect();
+      wifiMulti.run();
       lastReconnectAttempt = currentMillis;
     }
   }
@@ -512,7 +515,7 @@ void loop()
     digitalWrite(outputEnablePin, HIGH); // Activate Outputs !Possible Danger! Should see PVDD on output!
 
     // Get the output voltage
-    VoltControl_PWM = round((FValue1.toFloat() - 0.3) / TargetVoltsConversionFactor); // TEMP 0.3 VALUE FOR OFFSET UNTIL NEW CALIBRATION
+    VoltControl_PWM = round((FValue1.toFloat()) / TargetVoltsConversionFactor); // TEMP 0.3 VALUE FOR OFFSET UNTIL NEW CALIBRATION
     ledcWrite(VoltControl_PWM_Pin, VoltControl_PWM); // Set the RSP1000-24 output voltage to the target value
 
     if (digitalRead(testButton) == LOW) // Watch for another button press, disable the output
