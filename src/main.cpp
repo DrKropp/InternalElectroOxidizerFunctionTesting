@@ -26,6 +26,7 @@ Software To Do (TK):
 
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WiFiMulti.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include "LittleFS.h"
@@ -42,6 +43,13 @@ Software To Do (TK):
 const char *ssid = "ekotestbox01";  
 const char *password = "myvoiceismypassword"; 
 const char *hostname = "OrinTechBox01";
+
+WiFiMulti wifiMulti;
+
+// Wifi reconnection helper variables
+unsigned long previousMillis = 0;
+unsigned long interval = 30000;
+
 // DNS server
 const byte DNS_PORT = 53;
 DNSServer dnsServer;
@@ -61,11 +69,11 @@ AsyncWebSocket ws("/ws");
 String message = "";
 String runState = "FALSE";
 
-String FValue1 = "14"; // OUTPUT VOLTAGE
-String FValue2 = "100"; // FORWARD TIME
-uint16_t ForwardTimeInt = 100; // FORWARD TIME in mS
-String RValue2 = "100"; // REVERSE TIME
-uint16_t ReverseTimeInt = 100; // REVERSE TIME in mS
+String FValue1; // OUTPUT VOLTAGE
+String FValue2; // FORWARD TIME
+uint16_t ForwardTimeInt; // FORWARD TIME in mS
+String RValue2; // REVERSE TIME
+uint16_t ReverseTimeInt; // REVERSE TIME in mS
 
 String targetVolts = "0.0"; // targetVolts holds target voltage 10.0<TargetVolts<26.0 0.1V resolution
 //String RValue2 = "0"; // reverseTime sets the reversal time in mS
@@ -92,11 +100,9 @@ float peakNegativeVoltage = 0.0;
 float averagePositiveVoltage = 0.0;
 float averageNegativeVoltage = 0.0;
 
-//Json Variable to Hold Values
-JsonDocument controlValues;
-
 //Get Values
 String getValues(){
+  JsonDocument controlValues;
 
   controlValues["FValue1"] = String(FValue1);
   controlValues["FValue2"] = String(FValue2);
@@ -117,12 +123,23 @@ String getValues(){
   return output;
 }
 
-// helper variables
-uint16_t samplesPerAverage = 50;
+// helper variables for averaging
+const uint8_t MAX_SAMPLES = 50;
 float forwardSum = 0.0; // Sum of current readings for averaging
 float reverseSum = 0.0;
-uint16_t forwardCount = 0; // Count of current readings for averaging
-uint16_t reverseCount = 0; // Count of current readings for averaging
+uint16_t forwardIndex = 0; // Count of current readings for averaging
+uint16_t reverseIndex = 0; // Count of current readings for averaging
+
+float forwardCurrentReadings[MAX_SAMPLES];
+float reverseCurrentReadings[MAX_SAMPLES]; 
+
+float alpha = 0.05; // smoothing factor for exponential weighted average
+float previousNegativeValue = 0.0;  
+float previousPositiveValue = 0.0;  
+bool isFirstPositiveSample = true;
+bool isFirstNegativeSample = true;
+
+
 
 // Define some GPIO connections between ESP32-S3 and DRV8706H-Q1
 const uint8_t VoltControl_PWM_Pin = 8; // GPIO 8 PWM Output will adjust 24V power supply output, PWM Setting=TargetVolts/TargetVoltsConversionFactor
@@ -181,86 +198,93 @@ uint16_t SO_ADC;                    // raw, unscaled current output reading
 // Some other constants
 const float TargetVoltsConversionFactor = 0.0301686059427937; // Slope Value from calibration 16Jan2025
 
-bool testAttach = false; // Did the forward pwm pin successfully attach?
-
 // ADC Constants
 //const float CURRENT_ZERO_POINT = 2019;  
 //const float SLOPE = 51.1f;     
 const float CURRENT_ZERO_POINT = 2045; // From calibration 7/5/25
 const float SLOPE = 52.1f;     // From calibration 7/5/25
 
-// put function declarations here:
+/* //put function declarations here:
 
-// Initialize WiFi
-// void initWiFi() {
-//   WiFi.mode(WIFI_STA);
-//   WiFi.begin(ssid, password);
-//   Serial.print("Connecting to WiFi ..");
-//   while (WiFi.status() != WL_CONNECTED) {
-//     Serial.print('.');
-//     delay(1000);
-//   }
-//   Serial.println(WiFi.localIP());
-// }
+Initialize WiFi
+void initWiFi() {
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to WiFi ..");
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print('.');
+    delay(1000);
+  }
+  Serial.println(WiFi.localIP());
+}
 
-// void setupAP() {
-//     // uint8_t mac[6];
-//     // WiFi.macAddress(mac);
-//     // snprintf(ap_ssid, sizeof(ap_ssid), "esp_%02X%02X%02X%02X%02X%02X", 
-//     //         mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+void setupAP() {
+    // uint8_t mac[6];
+    // WiFi.macAddress(mac);
+    // snprintf(ap_ssid, sizeof(ap_ssid), "esp_%02X%02X%02X%02X%02X%02X", 
+    //         mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
-//     strncpy(ap_ssid, custom_ssid, sizeof(ap_ssid));
+    strncpy(ap_ssid, custom_ssid, sizeof(ap_ssid));
 
-//     WiFi.softAPConfig(apIP, apIP, netMsk);
-//     WiFi.softAP(ap_ssid, ap_password.c_str());
+    WiFi.softAPConfig(apIP, apIP, netMsk);
+    WiFi.softAP(ap_ssid, ap_password.c_str());
     
-//     dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
-//     dnsServer.start(DNS_PORT, "*", apIP);
+    dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
+    dnsServer.start(DNS_PORT, "*", apIP);
     
-//     Serial.print("Setting up AP: ");
-//     Serial.println(ap_ssid);
-//     Serial.print("AP IP: ");
-//     Serial.println(WiFi.softAPIP());
-// }
-
-// void initWiFi() {
-//   WiFi.setHostname(hostname);
-//   WiFi.mode(WIFI_STA);
-//   WiFi.begin(ssid, password);
-//   Serial.print("Connecting to WiFi ..");
-  
-//   int attempts = 0;
-//   while (WiFi.status() != WL_CONNECTED && attempts < 20) {
-//     Serial.print('.');
-//     delay(500);
-//     attempts++;
-//   }
-  
-//   if (WiFi.status() == WL_CONNECTED) {
-//     Serial.println("\nConnected! Hostname: " + String(hostname));
-//     Serial.println("IP address: " + WiFi.localIP().toString());
-//   } else {
-//     Serial.println("\nFailed to connect to WiFi!");
-//   }
-// }
-
-// void scanNetworks() {
-//   Serial.println("Scanning networks...");
-//   int n = WiFi.scanNetworks();
-//   for (int i = 0; i < n; i++) {
-//     Serial.printf("%s (%d dBm)\n", WiFi.SSID(i).c_str(), WiFi.RSSI(i));
-//   }
-// }
+    Serial.print("Setting up AP: ");
+    Serial.println(ap_ssid);
+    Serial.print("AP IP: ");
+    Serial.println(WiFi.softAPIP());
+}
 
 void initWiFi() {
   WiFi.setHostname(hostname);
   WiFi.mode(WIFI_STA);
-  delay(100);
-
-  //scanNetworks(); // Scan for available networks
-
   WiFi.begin(ssid, password);
-  Serial.println("\nConnecting to WiFi...");
+  Serial.print("Connecting to WiFi ..");
+  
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+    Serial.print('.');
+    delay(500);
+    attempts++;
+  }
+  
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nConnected! Hostname: " + String(hostname));
+    Serial.println("IP address: " + WiFi.localIP().toString());
+  } else {
+    Serial.println("\nFailed to connect to WiFi!");
+  }
+}
+
+void scanNetworks() {
+  Serial.println("Scanning networks...");
+  int n = WiFi.scanNetworks();
+  for (int i = 0; i < n; i++) {
+    Serial.printf("%s (%d dBm)\n", WiFi.SSID(i).c_str(), WiFi.RSSI(i));
+  }
+} */
+
+void initWiFi() {
+  WiFi.setHostname(hostname);
+  WiFi.mode(WIFI_STA);
+    
+  // Add list of wifi networks
+  wifiMulti.addAP("ExcitonClean", "sunnycarrot023");
+  wifiMulti.addAP("ekotestbox01", "myvoiceismypassword");
+  wifiMulti.addAP("SandersWifi", "ISsignum12");
+
+  //WiFi.begin(ssid, password);
+  Serial.println("Connecting to WiFi...");
+
+  if(wifiMulti.run() == WL_CONNECTED) {
+    Serial.println("");
+    Serial.println("WiFi connected");
+    Serial.println("IP address: ");
+    Serial.println(WiFi.localIP());
+  }
 
   unsigned long startAttemptTime = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 20000) { // 20s timeout
@@ -317,10 +341,82 @@ void resetPeakValues() {
   peakNegativeCurrent = 0.0;
   averagePositiveCurrent = 0.0;
   averageNegativeCurrent = 0.0;
+
   peakPositiveVoltage = FValue1.toFloat();
   peakNegativeVoltage = FValue1.toFloat();
   averagePositiveVoltage = FValue1.toFloat();
   averageNegativeVoltage = FValue1.toFloat();
+
+  previousPositiveValue = 0.0;
+  previousNegativeValue = 0.0;
+  isFirstPositiveSample = true;
+  isFirstNegativeSample = true;
+
+  forwardIndex = 0;
+  reverseIndex = 0;
+}
+
+void setDefaultSettings() {
+  FValue1 = "14";
+  FValue2 = "100";
+  RValue2 = "100";
+  ForwardTimeInt = FValue2.toInt();
+  ReverseTimeInt = RValue2.toInt();
+}
+
+bool saveSettings() {
+  JsonDocument doc;
+  doc["FValue1"] = FValue1;
+  doc["FValue2"] = FValue2;
+  doc["RValue2"] = RValue2;
+
+  File file = LittleFS.open("/settings.json", "w");
+  if (!file) {
+    Serial.println("Failed to create settings file");
+    return false;
+  }
+  
+  if (serializeJson(doc, file)) {
+    file.close();
+    return true;
+  }
+  
+  file.close();
+  return false;
+}
+
+bool loadSettings() {
+  if (!LittleFS.exists("/settings.json")) {
+    Serial.println("No settings file found. Creating with defaults.");
+    setDefaultSettings();
+    return saveSettings(); 
+  }
+
+  File file = LittleFS.open("/settings.json", "r");
+  if (!file) {
+    Serial.println("Failed to open settings file");
+    return false;
+  }
+
+  JsonDocument doc;
+  DeserializationError error = deserializeJson(doc, file);
+  if (error) {
+    Serial.println("Failed to parse settings file");
+    file.close();
+    return false;
+  }
+
+  // Load values or use defaults if missing
+  FValue1 = doc["FValue1"] | "14";
+  FValue2 = doc["FValue2"] | "100";
+  RValue2 = doc["RValue2"] | "100";
+
+  // Update derived values
+  ForwardTimeInt = FValue2.toInt();
+  ReverseTimeInt = RValue2.toInt();
+  
+  file.close();
+  return true;
 }
 
 void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
@@ -341,6 +437,7 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
       Serial.println(getValues());
       notifyClients(getValues());
       resetPeakValues();
+      saveSettings(); 
     }
     if (message.indexOf("2F") >= 0) {
       FValue2 = message.substring(2);
@@ -350,6 +447,7 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
       Serial.println(getValues());
       notifyClients(getValues());
       resetPeakValues();
+      saveSettings();
     }
     if (message.indexOf("2R") >= 0) {
       RValue2 = message.substring(2);
@@ -359,6 +457,7 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
       Serial.println(getValues());
       notifyClients(getValues());
       resetPeakValues();
+      saveSettings();
     }
     if (strcmp((char*)data, "getValues") == 0) {
       notifyClients(getValues());
@@ -411,10 +510,9 @@ String processor(const String &var)
 
 void setup() {
   Serial.begin(460800);
-  //delay(5000);
-  rgbLedWrite(RGBLedPin, 0, 55, 0);
+  delay(100);
 
-  testAttach = ledcAttach(VoltControl_PWM_Pin, PWMFreq, outputBits);
+  bool testAttach = ledcAttach(VoltControl_PWM_Pin, PWMFreq, outputBits);
   if (!testAttach) Serial.println("Error in RSP1000-24 Control");
 
   pinMode(outputEnablePin, OUTPUT);
@@ -422,13 +520,12 @@ void setup() {
   pinMode(nSleepPin, OUTPUT);
   pinMode(DRVOffPin, OUTPUT);
   pinMode(nFaultPin, INPUT);
+  pinMode(testButton, INPUT_PULLUP);
 
   analogContinuousSetWidth(12);
   analogContinuousSetAtten(ADC_11db);
   analogContinuous(SO_Pin, 1, CONVERSIONS_PER_PIN, 20000, &adcComplete);
   analogContinuousStart();
-
-  pinMode(testButton, INPUT_PULLUP);
 
   // Initialize to safe state
   digitalWrite(nSleepPin, LOW);
@@ -436,18 +533,12 @@ void setup() {
   digitalWrite(outputEnablePin, LOW);
   digitalWrite(outputDirectionPin, LOW);
 
-  // ledcWrite(VoltControl_PWM_Pin, VoltControl_PWM);
-  // rgbLedWrite(RGBLedPin, 0, 23, 10);
-  // delay(100);
-
   digitalWrite(nSleepPin, HIGH);
   Serial.println("DRV8706 Waking Up!");
-  rgbLedWrite(RGBLedPin, 0, 23, 0);
   //delay(100);
 
   digitalWrite(DRVOffPin, LOW);
   Serial.println("DRV8706 Output Enabled! Outputs off...");
-  rgbLedWrite(48, 23, 23, 23);
   //delay(100);
 
   rgbLedWrite(RGBLedPin, 0, 0, 0);
@@ -455,6 +546,12 @@ void setup() {
   // Initialize WiFi and filesystem
   initWiFi();
   initFS();
+
+  if (!loadSettings()) {
+    Serial.println("Failed to load settings. Using defaults.");
+    setDefaultSettings();
+  }
+
   initWebSocket();
 
   server.onNotFound([](AsyncWebServerRequest *request){
@@ -470,7 +567,7 @@ void setup() {
 
   reversestartTime = micros();
   samplingstartTime = micros();
-  resetPeakValues(); // Reset peak values at startup
+  resetPeakValues();
 }
 
 unsigned long lastReconnectAttempt = 0;
@@ -483,7 +580,7 @@ void loop()
     if (currentMillis - lastReconnectAttempt >= reconnectInterval) {
       Serial.println("Reconnecting to WiFi...");
       WiFi.disconnect();
-      WiFi.reconnect();
+      wifiMulti.run();
       lastReconnectAttempt = currentMillis;
     }
   }
@@ -512,7 +609,7 @@ void loop()
     digitalWrite(outputEnablePin, HIGH); // Activate Outputs !Possible Danger! Should see PVDD on output!
 
     // Get the output voltage
-    VoltControl_PWM = round((FValue1.toFloat() - 0.3) / TargetVoltsConversionFactor); // TEMP 0.3 VALUE FOR OFFSET UNTIL NEW CALIBRATION
+    VoltControl_PWM = round((FValue1.toFloat()) / TargetVoltsConversionFactor); // TEMP 0.3 VALUE FOR OFFSET UNTIL NEW CALIBRATION
     ledcWrite(VoltControl_PWM_Pin, VoltControl_PWM); // Set the RSP1000-24 output voltage to the target value
 
     if (digitalRead(testButton) == LOW) // Watch for another button press, disable the output
@@ -550,61 +647,71 @@ void loop()
         {
           analogContinuousStop(); // Stop ADC Continuous conversions to have more time to process (print) the data
 
-          uint32_t current_mV = result[0].avg_read_mvolts;
-          
-         //outputCurrent = (((result[0].avg_read_mvolts/1000.0f)*(VOLTSTOCOUNTS))-CURRENT_ZERO_POINT)/SLOPE; // Convert mV to amps -> Amps = (ADCcount - VCC/2)/slope
-          outputCurrent = ((result[0].avg_read_raw)-CURRENT_ZERO_POINT)/SLOPE;
+          outputCurrent = ((result[0].avg_read_raw)-CURRENT_ZERO_POINT)/SLOPE; // Current Reading in Amps
 
-          if(outputCurrent > peakPositiveCurrent && result[0].avg_read_raw > 100){ // Only update peak current if the reading is above a threshold to avoid noise
+          if(isFirstPositiveSample && outputCurrent > 0.0){ 
+            previousPositiveValue = outputCurrent;
+            isFirstPositiveSample = false;
+          } else if(outputCurrent > 0.0){
+            outputCurrent = alpha * outputCurrent + (1 - alpha) * previousPositiveValue; // exponential smoothing
+            previousPositiveValue = outputCurrent;
+          }
+
+          if(isFirstNegativeSample && outputCurrent < 0.0){
+            previousNegativeValue = outputCurrent;
+            isFirstNegativeSample = false;
+          } else if(outputCurrent < 0.0){
+            outputCurrent = alpha * outputCurrent + (1 - alpha) * previousNegativeValue; // exponential smoothing
+            previousNegativeValue = outputCurrent;
+          }
+
+          if(outputDirection == true){ // Forward direction
+            if(forwardIndex < MAX_SAMPLES && outputCurrent > 0){
+              forwardCurrentReadings[forwardIndex] = outputCurrent;
+              Serial.print(">ForwardCurrentReadings:");
+              Serial.println(outputCurrent);
+
+              forwardIndex++;
+            } else if(forwardIndex >= MAX_SAMPLES){ // After MAX_SAMPLES, calculate average and reset helper variables
+              for(int i = 0; i < MAX_SAMPLES; i++){
+                forwardSum += forwardCurrentReadings[i];
+              }
+              averagePositiveCurrent = forwardSum / MAX_SAMPLES; 
+              forwardSum = 0.0;
+              forwardIndex = 0;
+              notifyClients(getValues());
+            }
+          } else { // Reverse direction
+            if(reverseIndex < MAX_SAMPLES && outputCurrent < 0){
+              reverseCurrentReadings[reverseIndex] = outputCurrent;
+              Serial.print(">ReverseCurrentReadings:");
+              Serial.println(outputCurrent);
+              reverseIndex++;
+            } else if(reverseIndex >= MAX_SAMPLES){ // After MAX_SAMPLES, calculate average and reset helper variables
+              for(int i = 0; i < MAX_SAMPLES; i++){
+                reverseSum += reverseCurrentReadings[i];
+              }
+              averageNegativeCurrent = reverseSum / MAX_SAMPLES; 
+              reverseSum = 0.0;
+              reverseIndex = 0;
+              notifyClients(getValues());
+            }
+          }
+
+          if(outputCurrent > peakPositiveCurrent){ // sets peak current numbers
             peakPositiveCurrent = outputCurrent;
             notifyClients(getValues());
-          }
-          if(outputCurrent < peakNegativeCurrent && result[0].avg_read_raw > 100){
+          } else if(outputCurrent < peakNegativeCurrent){
             peakNegativeCurrent = outputCurrent;
             notifyClients(getValues());
           }
 
-          if(outputDirection == true && result[0].avg_read_raw > 100){ // Forward direction
-            if(forwardCount < samplesPerAverage){
-              forwardSum += outputCurrent; 
-              forwardCount++;
-            } else {
-              averagePositiveCurrent = forwardSum / samplesPerAverage; 
-              forwardSum = 0.0;
-              forwardCount = 0;
-            }
-          } else { // Reverse direction
-            if(reverseCount < samplesPerAverage && result[0].avg_read_raw > 100){
-              reverseSum += outputCurrent; 
-              reverseCount++;
-            } else {
-              averageNegativeCurrent = reverseSum / samplesPerAverage; 
-              reverseSum = 0.0;
-              reverseCount = 0;
-            }
-          }
-          // Serial.printf("\nADC PIN %d data:", result[0].pin);
-          // Serial.printf("\n   Avg raw value = %d", result[0].avg_read_raw);
-          // Serial.printf("\n   Avg millivolts value = %d", result[0].avg_read_mvolts);
-          // Serial.printf("\n   Avg Counts value = %f", ((result[0].avg_read_mvolts/1000.0f)*(VOLTSTOCOUNTS)));
-          // Serial.printf("\n   Avg Amps value = %f", outputCurrent);
+          Serial.print(">SOADC:"); // Send formatted serial output to Teleplot serial data plotter
+          Serial.println(outputCurrent);
 
-          
-          //float rawCounts = (result[0].avg_read_mvolts / 1000.0f) * (ADC_MAX_COUNTS / ADC_REF_VOLTAGE);
+          Serial.print(">SOADC2:");
+          Serial.println(result[0].avg_read_raw);
 
-          //outputCurrent = (rawCounts - CURRENT_ZERO_POINT) / SLOPE; // Convert raw counts to amps
-
-          // Serial.print(">SOADC:"); // Send formatted serial output to Teleplot serial data plotter
-          // Serial.println(outputCurrent);
-
-          // Serial.print(">SOADC2:");
-          // Serial.println(result[0].avg_read_raw);
-
-          // Serial.print(">SOADC3:");
-          // Serial.println(result[0].avg_read_mvolts);
-
-          //Serial.print(">SOADC:"); // Send formatted serial output to Teleplot serial data plotter
-          //Serial.println(result[0].avg_read_mvolts);
           analogContinuousStart(); // Start ADC conversions and wait for callback function to set adc_conversion_done flag to true
         }
         else
@@ -618,4 +725,3 @@ void loop()
     }
   }
 }
-
