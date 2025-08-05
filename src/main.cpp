@@ -138,7 +138,7 @@ float previousNegativeValue = 0.0;
 float previousPositiveValue = 0.0;  
 bool isFirstPositiveSample = true;
 bool isFirstNegativeSample = true;
-
+bool hasResetPeakCurrent = false;
 
 
 // Define some GPIO connections between ESP32-S3 and DRV8706H-Q1
@@ -275,6 +275,7 @@ void initWiFi() {
   wifiMulti.addAP("ExcitonClean", "sunnycarrot023");
   wifiMulti.addAP("ekotestbox01", "myvoiceismypassword");
   wifiMulti.addAP("SandersWifi", "ISsignum12");
+  wifiMulti.addAP("ekotestbox02", "myvoiceismypassword");
 
   //WiFi.begin(ssid, password);
   Serial.println("Connecting to WiFi...");
@@ -406,12 +407,11 @@ bool loadSettings() {
     return false;
   }
 
-  // Load values or use defaults if missing
+  // load values or use defaults if missing
   FValue1 = doc["FValue1"] | "14";
   FValue2 = doc["FValue2"] | "100";
   RValue2 = doc["RValue2"] | "100";
 
-  // Update derived values
   ForwardTimeInt = FValue2.toInt();
   ReverseTimeInt = RValue2.toInt();
   
@@ -458,6 +458,11 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
       notifyClients(getValues());
       resetPeakValues();
       saveSettings();
+    }
+    if(message.indexOf("resetPeakCurrent") >= 0) {
+      Serial.println("Resetting peak current values");
+      resetPeakValues();
+      notifyClients(getValues());
     }
     if (strcmp((char*)data, "getValues") == 0) {
       notifyClients(getValues());
@@ -722,6 +727,13 @@ void loop()
       // SO_ADC = analogRead(SO_Pin);
       // Serial.print(">SOADC:");
       // Serial.println(SO_ADC);
+    }
+
+    if(currentTimeMillis >= 60000 && !hasResetPeakCurrent)
+    {
+      hasResetPeakCurrent = true;
+      resetPeakValues();
+      notifyClients(getValues());
     }
   }
 }
