@@ -242,3 +242,58 @@ html {
     justify-content: center;
     flex-direction: column;
   }
+
+  .bottom-grid {
+    max-width: 700px;
+    justify-content: center;
+    margin-top:25px;
+    gap: 10px;
+    margin: 0 auto;
+    height: 100px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+  
+  .bottom-card {
+    border-radius: 10px;
+    box-shadow: 2px 2px 12px 1px rgba(140,140,140,.5);  
+    padding:10px;
+    background-color: green;
+  }
+  .bottom-card p {
+    color: white;
+    font-size: 2rem;
+    margin: 30px;
+  }
+  .bottom-card h2 {
+    font-size: 1.8rem;
+    margin:5px;
+  }
+  .bottom-card .button{
+    padding: 10px 30px;
+    font-size: 20px;
+    margin: 5px;
+    width: 40%;
+    height: 60px;
+    background-color: #828282;
+    box-shadow: 2px 2px 12px 1px rgba(0, 0, 0, 0.5);
+  }
+  .bottom-card .button:active {
+    background-color: #0f8b8d;
+    box-shadow: 2 2px #CDCDCD;
+    transform: translateY(2px);
+  }
+  .bottom-grid #toggle-card {
+    background-color: #F8F7F9;
+  }
+  .bottom-grid #toggle-card h2 {
+    color: #034078;
+  }
+  .bottom-card #on-button.button.active {
+    background-color:  green;
+    box-shadow: 2px 2px 12px 1px rgba(0, 0, 0, 0.5);
+  }
+  .bottom-card #off-button.button.active {
+    background-color: rgb(231, 42, 42);
+    box-shadow: 2px 2px 12px 1px rgba(0, 0, 0, 0.5);
+  }
