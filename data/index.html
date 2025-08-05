@@ -62,11 +62,20 @@
                 <p class="state">Avg. Negative Current: <span id="averageNegativeCurrent">0</span></p>
                 <p class="state">Peak Negative Current: <span id="peakNegativeCurrent">0</span></p>         
             </div>
-            <div class="top-card" id="toggle-card">
-                <p class="state">Output: <span id="state">OFF</span></p>
+        </div>
+        <div class="bottom-grid">
+            <div class="bottom-card" id="state-card">
+                <h2>Device Output</h2>
+                <p class="state"><span id="state">ON</span></p>
+            </div>
+            <div class="bottom-card" id="toggle-card">
+                <h2>Device Output Control</h2>
+                <button id="on-button" class="button active">ON</button>
+                <button id="off-button" class="button">OFF</button>
             </div>
         </div>
     </div>
     <script src="script.js"></script>
 </body>
+
 </html>
