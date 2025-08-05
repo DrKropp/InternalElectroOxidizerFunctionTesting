@@ -6,7 +6,7 @@ And From: https://randomnerdtutorials.com/esp32-web-server-websocket-sliders/ */
 
 var gateway = `ws://${window.location.hostname}/ws`;
 var websocket;
-var isArmed = false; // is Armed - false = no / true = yes
+var isArmed = true; // is Armed - false = no / true = yes
 var isS = false; // is in seconds mode - false = no / true = yes
 
 window.addEventListener('load', onload);
@@ -37,7 +37,7 @@ function initWebSocket() {
         if(websocket.readyState === websocket.OPEN){
             websocket.send("getValues");
         }
-    }, 5000); // reqs data every 5 seconds
+    }, 5000); // requests data every 5 seconds
 }
 
 function onOpen(event) {
@@ -87,23 +87,43 @@ function onMessage(event) {
 }
 
 function initButton() {
-    document.getElementById('toggle-card').addEventListener('click', toggle);
+    document.getElementById('off-button').addEventListener('click', toggleOff);
+    document.getElementById('on-button').addEventListener('click', toggleOn);
     document.getElementById('update-button').addEventListener('click', handleUpdate);
     document.querySelector('.timing-toggle').addEventListener('click', function(e) {
         e.stopPropagation();
     });
 }
 
+function toggleOff() {
+    if(!isArmed) { return; }
+    isArmed = false;
+    document.getElementById('state').innerHTML = "OFF";
+    document.querySelector('.bottom-card').style.backgroundColor = "red";
+    document.getElementById('on-button').classList.remove('active');
+    document.getElementById('off-button').classList.add('active');
+    websocket.send('toggle');
+}
+
+function toggleOn() {
+    if(isArmed) { return; }
+    isArmed = true;
+    document.getElementById('state').innerHTML = "ON";
+    document.querySelector('.bottom-card').style.backgroundColor = "green";
+    document.getElementById('on-button').classList.add('active');
+    document.getElementById('off-button').classList.remove('active');
+    websocket.send('toggle');
+}
   function toggle(){
     //websocket.send('toggle');
     if(isArmed){
         isArmed = false;
         document.getElementById('state').innerHTML = "OFF";
-        document.querySelector('.top-card').style.backgroundColor = "red";
+        document.querySelector('.bottom-card').style.backgroundColor = "red";
     } else {
         isArmed = true;
         document.getElementById('state').innerHTML = "ON";
-        document.querySelector('.top-card').style.backgroundColor = "green";
+        document.querySelector('.bottom-card').style.backgroundColor = "green";
     }
     websocket.send('toggle');
   }
