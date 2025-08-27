@@ -33,6 +33,9 @@ Software To Do (TK):
 #include <ArduinoJson.h>
 #include <string>
 #include <DNSServer.h>
+#include "esp_adc/adc_continuous.h"
+#include "esp_adc/adc_cali.h"
+#include "esp_adc/adc_cali_scheme.h"
 
 // TK get rid of hard coded security information before release!
 // TK use the ESP32 as a wifi access point local network with secure login credentials. User access control?
@@ -151,17 +154,23 @@ const uint8_t nSleepPin = 15;          // Can put DRV8706H-Q1 into sleep mode, H
 const uint8_t DRVOffPin = 16;          // Disable DRV8706H-Q1 drive output without affecting other subsystems, High disables output
 const uint8_t nFaultPin = 17;          // Fault indicator output pulled low to indicate fault condition
 
-// Structures for rapid ADC reading
-#define CONVERSIONS_PER_PIN 500
-uint8_t SO_Pin[] = {2};                   // Analog signal proportional to output current, values below VCC/2 for negative current
-volatile bool adc_conversion_done = false; // Flag which will be set in ISR when conversion is done
-adc_continuous_data_t *result = NULL;     // Result structure for ADC Continuous reading
+// New ADC continuous mode variables
+adc_continuous_handle_t adc_handle = NULL;
+adc_cali_handle_t adc_cali_handle = NULL;
+bool adc_calibrated = false;
+const int ADC_PIN = 2;                   // GPIO pin 2
+const int SAMPLE_RATE = 20000;           // 20 kHz sampling rate
+const unsigned long WINDOW_US = 40000;   // 40ms = 40,000 microseconds
+const int MAX_SAMPLES_NEW = 1000;        // Maximum samples to store per window
+const int BUFFER_SIZE = MAX_SAMPLES_NEW * 4; // Larger buffer for continuous mode
 
-// ISR Function that will be triggered when ADC conversion is done
-void ARDUINO_ISR_ATTR adcComplete()
-{
-  adc_conversion_done = true;
-}
+// Buffers and variables for ADC
+uint8_t adc_buffer[BUFFER_SIZE * sizeof(adc_digi_output_data_t)];
+float voltage_samples[MAX_SAMPLES_NEW];
+int sample_count = 0;
+unsigned long window_start_us = 0;
+unsigned long last_calculation = 0;
+float latestRaw = 0;                     // Latest raw ADC value
 
 // Define other ESP32-S3 GPIO connections
 const uint8_t testButton = 1; // Button pulls GPIO 01 to ground when pressed, currently used for testing
@@ -203,6 +212,102 @@ const float TargetVoltsConversionFactor = 0.0301686059427937; // Slope Value fro
 //const float SLOPE = 51.1f;     
 const float CURRENT_ZERO_POINT = 2045; // From calibration 7/5/25
 const float SLOPE = 52.1f;     // From calibration 7/5/25
+
+// New ADC functions
+void setup_adc_calibration() {
+  // Initialize ADC calibration
+  adc_cali_curve_fitting_config_t cali_config = {
+      .unit_id = ADC_UNIT_1,
+      .atten = ADC_ATTEN_DB_12,
+      .bitwidth = ADC_BITWIDTH_12,
+  };
+
+  esp_err_t ret = adc_cali_create_scheme_curve_fitting(&cali_config, &adc_cali_handle);
+  if (ret == ESP_OK) {
+    adc_calibrated = true;
+    Serial.println("ADC calibration initialized successfully");
+  } else {
+    Serial.println("ADC calibration failed, using raw values");
+    adc_calibrated = false;
+  }
+}
+
+void setup_adc_continuous() {
+  // Configure ADC continuous mode
+  adc_continuous_handle_cfg_t adc_config = {
+      .max_store_buf_size = BUFFER_SIZE * 4,
+      .conv_frame_size = BUFFER_SIZE,
+  };
+
+  esp_err_t ret = adc_continuous_new_handle(&adc_config, &adc_handle);
+  if (ret != ESP_OK) {
+    Serial.printf("Failed to create ADC handle: %s\n", esp_err_to_name(ret));
+    return;
+  }
+
+  // Configure ADC pattern
+  adc_digi_pattern_config_t adc_pattern = {
+      .atten = ADC_ATTEN_DB_12,
+      .channel = ADC_CHANNEL_1, // GPIO2 is ADC_CHANNEL_1
+      .unit = ADC_UNIT_1,
+      .bit_width = ADC_BITWIDTH_12,
+  };
+
+  adc_continuous_config_t dig_cfg = {
+      .pattern_num = 1,
+      .adc_pattern = &adc_pattern,
+      .sample_freq_hz = SAMPLE_RATE,
+      .conv_mode = ADC_CONV_SINGLE_UNIT_1,
+      .format = ADC_DIGI_OUTPUT_FORMAT_TYPE2,
+  };
+
+  ret = adc_continuous_config(adc_handle, &dig_cfg);
+  if (ret != ESP_OK) {
+    Serial.printf("Failed to configure ADC: %s\n", esp_err_to_name(ret));
+    return;
+  }
+
+  // Start continuous conversion
+  ret = adc_continuous_start(adc_handle);
+  if (ret != ESP_OK) {
+    Serial.printf("Failed to start ADC: %s\n", esp_err_to_name(ret));
+    return;
+  }
+
+  Serial.println("ADC continuous mode started successfully");
+}
+
+void process_adc_data() {
+  uint32_t bytes_read = 0;
+  esp_err_t ret = adc_continuous_read(adc_handle, adc_buffer, sizeof(adc_buffer), &bytes_read, 0);
+
+  if (ret == ESP_OK && bytes_read > 0) {
+    adc_digi_output_data_t *p = (adc_digi_output_data_t *)adc_buffer;
+    uint32_t num_samples = bytes_read / sizeof(adc_digi_output_data_t);
+
+    for (uint32_t i = 0; i < num_samples && sample_count < MAX_SAMPLES_NEW; i++) {
+      // For ESP32-S3, use type2 format
+      if (p[i].type2.channel == ADC_CHANNEL_1 && p[i].type2.unit == ADC_UNIT_1) {
+        uint32_t adc_raw = p[i].type2.data;
+        latestRaw = adc_raw; // Store the latest raw value
+
+        if (adc_calibrated) {
+          int voltage_mv;
+          esp_err_t ret = adc_cali_raw_to_voltage(adc_cali_handle, adc_raw, &voltage_mv);
+          if (ret == ESP_OK) {
+            voltage_samples[sample_count] = voltage_mv / 1000.0; // Convert to volts
+          } else {
+            voltage_samples[sample_count] = (adc_raw * 3.3) / 4095.0; // Fallback calculation
+          }
+        } else {
+          voltage_samples[sample_count] = (adc_raw * 3.3) / 4095.0; // Raw calculation
+        }
+
+        sample_count++;
+      }
+    }
+  }
+}
 
 /* //put function declarations here:
 
@@ -527,10 +632,9 @@ void setup() {
   pinMode(nFaultPin, INPUT);
   pinMode(testButton, INPUT_PULLUP);
 
-  analogContinuousSetWidth(12);
-  analogContinuousSetAtten(ADC_11db);
-  analogContinuous(SO_Pin, 1, CONVERSIONS_PER_PIN, 20000, &adcComplete);
-  analogContinuousStart();
+  // Initialize new ADC continuous mode
+  setup_adc_calibration();
+  setup_adc_continuous();
 
   // Initialize to safe state
   digitalWrite(nSleepPin, LOW);
@@ -572,6 +676,8 @@ void setup() {
 
   reversestartTime = micros();
   samplingstartTime = micros();
+  window_start_us = micros();
+  last_calculation = millis();
   resetPeakValues();
 }
 
@@ -602,6 +708,42 @@ void loop()
   currentTime = micros();
   currentTimeMillis = millis();
 
+  // Process ADC data (this updates latestRaw and fills voltage_samples)
+  process_adc_data();
+
+  // Check if 40ms window has elapsed and we have samples
+  if (currentTime - window_start_us >= WINDOW_US && sample_count > 0) {
+    // Calculate statistics for the window
+    float max_voltage = 0.0;
+    float sum_voltage = 0.0;
+    float sum_raw = 0.0;
+
+    // Find max and calculate sum for average
+    for (int i = 0; i < sample_count; i++) {
+      if (voltage_samples[i] > max_voltage) {
+        max_voltage = voltage_samples[i];
+      }
+      sum_voltage += voltage_samples[i];
+      // For raw value calculation, we need to reconstruct from voltage
+      // Alternatively, we could store raw values separately
+      sum_raw += (voltage_samples[i] * 4095.0) / 3.3; // Reverse calculation
+    }
+
+    float avg_voltage = sum_voltage / sample_count;
+    float avg_raw = sum_raw / sample_count;
+    
+    // Use the average raw value for current calculation
+    latestRaw = avg_raw;
+    
+    // Print results with sample count for debugging
+    Serial.printf("ADC Stats - Max: %.3fV, Avg: %.3fV, Samples: %d\n", 
+                  max_voltage, avg_voltage, sample_count);
+    
+    // Reset for next window
+    sample_count = 0;
+    window_start_us = currentTime;
+  }
+
   if (isRunning == false)
   {
     rgbLedWrite(48, 0, 0, 0); // led off
@@ -614,119 +756,97 @@ void loop()
     digitalWrite(outputEnablePin, HIGH); // Activate Outputs !Possible Danger! Should see PVDD on output!
 
     // Get the output voltage
-    VoltControl_PWM = round((FValue1.toFloat()) / TargetVoltsConversionFactor); // TEMP 0.3 VALUE FOR OFFSET UNTIL NEW CALIBRATION
-    ledcWrite(VoltControl_PWM_Pin, VoltControl_PWM); // Set the RSP1000-24 output voltage to the target value
+    VoltControl_PWM = round((FValue1.toFloat()) / TargetVoltsConversionFactor);
+    ledcWrite(VoltControl_PWM_Pin, VoltControl_PWM);
 
-    if (digitalRead(testButton) == LOW) // Watch for another button press, disable the output
+    if (digitalRead(testButton) == LOW)
     {
       digitalWrite(outputEnablePin, LOW);
       isRunning = false;
       delay(250);
     }
 
-    if(outputDirection == false){ // Runs when output direction is forward
-      if (currentTime - reversestartTime >= ForwardTimeInt * 1000) // Non-Blocking time based control loop for reversing current direction
+    if(outputDirection == false){
+      if (currentTime - reversestartTime >= ForwardTimeInt * 1000)
       {
         reversestartTime = currentTime;
-        outputDirection = !outputDirection;                // Reverse the output direction variable
-        digitalWrite(outputDirectionPin, outputDirection); // Change the output direction
+        outputDirection = !outputDirection;
+        digitalWrite(outputDirectionPin, outputDirection);
       }
-    } else { // Runs when output direction is reverse
-      if (currentTime - reversestartTime >= ReverseTimeInt * 1000) // Non-Blocking time based control loop for reversing current direction
+    } else {
+      if (currentTime - reversestartTime >= ReverseTimeInt * 1000)
       {
         reversestartTime = currentTime;
-        outputDirection = !outputDirection;                // Reverse the output direction variable
-        digitalWrite(outputDirectionPin, outputDirection); // Change the output direction
+        outputDirection = !outputDirection;
+        digitalWrite(outputDirectionPin, outputDirection);
       }
     }
 
-    if (currentTime - samplingstartTime >= samplingTime && currentTime >= 100000) // currentTime >= 100000 to avoid sampling at startup
+    if (currentTime - samplingstartTime >= samplingTime && currentTime >= 100000)
     {
       samplingstartTime = currentTime;
-      if (adc_conversion_done == true)
-      {
-        // Set ISR flag back to false
-        adc_conversion_done = false;
-        // Read data from ADC
-        if (analogContinuousRead(&result, 0))
-        {
-          analogContinuousStop(); // Stop ADC Continuous conversions to have more time to process (print) the data
+      outputCurrent = (latestRaw - CURRENT_ZERO_POINT) / SLOPE; // Calculate current in Amps
 
-          outputCurrent = ((result[0].avg_read_raw)-CURRENT_ZERO_POINT)/SLOPE; // Current Reading in Amps
+      if(isFirstPositiveSample && outputCurrent > 0.0){ 
+        previousPositiveValue = outputCurrent;
+        isFirstPositiveSample = false;
+      } else if(outputCurrent > 0.0){
+        outputCurrent = alpha * outputCurrent + (1 - alpha) * previousPositiveValue;
+        previousPositiveValue = outputCurrent;
+      }
 
-          if(isFirstPositiveSample && outputCurrent > 0.0){ 
-            previousPositiveValue = outputCurrent;
-            isFirstPositiveSample = false;
-          } else if(outputCurrent > 0.0){
-            outputCurrent = alpha * outputCurrent + (1 - alpha) * previousPositiveValue; // exponential smoothing
-            previousPositiveValue = outputCurrent;
-          }
+      if(isFirstNegativeSample && outputCurrent < 0.0){
+        previousNegativeValue = outputCurrent;
+        isFirstNegativeSample = false;
+      } else if(outputCurrent < 0.0){
+        outputCurrent = alpha * outputCurrent + (1 - alpha) * previousNegativeValue;
+        previousNegativeValue = outputCurrent;
+      }
 
-          if(isFirstNegativeSample && outputCurrent < 0.0){
-            previousNegativeValue = outputCurrent;
-            isFirstNegativeSample = false;
-          } else if(outputCurrent < 0.0){
-            outputCurrent = alpha * outputCurrent + (1 - alpha) * previousNegativeValue; // exponential smoothing
-            previousNegativeValue = outputCurrent;
-          }
-
-          if(outputDirection == true){ // Forward direction
-            if(forwardIndex < MAX_SAMPLES && outputCurrent > 0){
-              forwardCurrentReadings[forwardIndex] = outputCurrent;
-              Serial.print(">ForwardCurrentReadings:");
-              Serial.println(outputCurrent);
-
-              forwardIndex++;
-            } else if(forwardIndex >= MAX_SAMPLES){ // After MAX_SAMPLES, calculate average and reset helper variables
-              for(int i = 0; i < MAX_SAMPLES; i++){
-                forwardSum += forwardCurrentReadings[i];
-              }
-              averagePositiveCurrent = forwardSum / MAX_SAMPLES; 
-              forwardSum = 0.0;
-              forwardIndex = 0;
-              notifyClients(getValues());
-            }
-          } else { // Reverse direction
-            if(reverseIndex < MAX_SAMPLES && outputCurrent < 0){
-              reverseCurrentReadings[reverseIndex] = outputCurrent;
-              Serial.print(">ReverseCurrentReadings:");
-              Serial.println(outputCurrent);
-              reverseIndex++;
-            } else if(reverseIndex >= MAX_SAMPLES){ // After MAX_SAMPLES, calculate average and reset helper variables
-              for(int i = 0; i < MAX_SAMPLES; i++){
-                reverseSum += reverseCurrentReadings[i];
-              }
-              averageNegativeCurrent = reverseSum / MAX_SAMPLES; 
-              reverseSum = 0.0;
-              reverseIndex = 0;
-              notifyClients(getValues());
-            }
-          }
-
-          if(outputCurrent > peakPositiveCurrent){ // sets peak current numbers
-            peakPositiveCurrent = outputCurrent;
-            notifyClients(getValues());
-          } else if(outputCurrent < peakNegativeCurrent){
-            peakNegativeCurrent = outputCurrent;
-            notifyClients(getValues());
-          }
-
-          Serial.print(">SOADC:"); // Send formatted serial output to Teleplot serial data plotter
+      if(outputDirection == true){
+        if(forwardIndex < MAX_SAMPLES && outputCurrent > 0){
+          forwardCurrentReadings[forwardIndex] = outputCurrent;
+          Serial.print(">ForwardCurrentReadings:");
           Serial.println(outputCurrent);
-
-          Serial.print(">SOADC2:");
-          Serial.println(result[0].avg_read_raw);
-
-          analogContinuousStart(); // Start ADC conversions and wait for callback function to set adc_conversion_done flag to true
+          forwardIndex++;
+        } else if(forwardIndex >= MAX_SAMPLES){
+          for(int i = 0; i < MAX_SAMPLES; i++){
+            forwardSum += forwardCurrentReadings[i];
+          }
+          averagePositiveCurrent = forwardSum / MAX_SAMPLES; 
+          forwardSum = 0.0;
+          forwardIndex = 0;
+          notifyClients(getValues());
         }
-        else
-        {
-          Serial.println("Error occurred during reading data. Set Core Debug Level to error or lower for more information.");
+      } else {
+        if(reverseIndex < MAX_SAMPLES && outputCurrent < 0){
+          reverseCurrentReadings[reverseIndex] = outputCurrent;
+          Serial.print(">ReverseCurrentReadings:");
+          Serial.println(outputCurrent);
+          reverseIndex++;
+        } else if(reverseIndex >= MAX_SAMPLES){
+          for(int i = 0; i < MAX_SAMPLES; i++){
+            reverseSum += reverseCurrentReadings[i];
+          }
+          averageNegativeCurrent = reverseSum / MAX_SAMPLES; 
+          reverseSum = 0.0;
+          reverseIndex = 0;
+          notifyClients(getValues());
         }
       }
-      // SO_ADC = analogRead(SO_Pin);
-      // Serial.print(">SOADC:");
-      // Serial.println(SO_ADC);
+
+      if(outputCurrent > peakPositiveCurrent){
+        peakPositiveCurrent = outputCurrent;
+        notifyClients(getValues());
+      } else if(outputCurrent < peakNegativeCurrent){
+        peakNegativeCurrent = outputCurrent;
+        notifyClients(getValues());
+      }
+
+      Serial.print(">SOADC:");
+      Serial.println(outputCurrent);
+      Serial.print(">SOADC2:");
+      Serial.println(latestRaw);
     }
 
     if(currentTimeMillis >= 60000 && !hasResetPeakCurrent)
