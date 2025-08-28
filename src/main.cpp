@@ -43,8 +43,8 @@ Software To Do (TK):
 // Replace with your network credentials
 // const char *ssid = "ExcitonClean";
 // const char *password = "sunnycarrot023";
-const char *ssid = "ekotestbox01";  
-const char *password = "myvoiceismypassword"; 
+const char *ssid = "ekotestbox01";
+const char *password = "myvoiceismypassword";
 const char *hostname = "OrinTechBox01";
 
 WiFiMulti wifiMulti;
@@ -64,7 +64,7 @@ DNSServer dnsServer;
 // String ap_password = "EO-3PasswordField";
 
 // Create AsyncWebServer object on port 80
-AsyncWebServer server(80); //TK Change to port 443 for secure network
+AsyncWebServer server(80); // TK Change to port 443 for secure network
 // Create a WebSocket object
 
 AsyncWebSocket ws("/ws");
@@ -72,14 +72,14 @@ AsyncWebSocket ws("/ws");
 String message = "";
 String runState = "FALSE";
 
-String FValue1; // OUTPUT VOLTAGE
-String FValue2; // FORWARD TIME
+String FValue1;          // OUTPUT VOLTAGE
+String FValue2;          // FORWARD TIME
 uint16_t ForwardTimeInt; // FORWARD TIME in mS
-String RValue2; // REVERSE TIME
+String RValue2;          // REVERSE TIME
 uint16_t ReverseTimeInt; // REVERSE TIME in mS
 
 String targetVolts = "0.0"; // targetVolts holds target voltage 10.0<TargetVolts<26.0 0.1V resolution
-//String RValue2 = "0"; // reverseTime sets the reversal time in mS
+// String RValue2 = "0"; // reverseTime sets the reversal time in mS
 
 // Duty cycles
 int dutyCycle1F;
@@ -90,8 +90,8 @@ int dutyCycle3F;
 int dutyCycle3R;
 
 // Output variables
-float outputCurrent = 0.0;  // Amps
-float outputVoltage = 0.0;  // Volts
+float outputCurrent = 0.0; // Amps
+float outputVoltage = 0.0; // Volts
 
 // Current and Voltage readings
 float peakPositiveCurrent = 0.0;
@@ -103,8 +103,9 @@ float peakNegativeVoltage = 0.0;
 float averagePositiveVoltage = 0.0;
 float averageNegativeVoltage = 0.0;
 
-//Get Values
-String getValues(){
+// Get Values
+String getValues()
+{
   JsonDocument controlValues;
 
   controlValues["FValue1"] = String(FValue1);
@@ -121,7 +122,7 @@ String getValues(){
 
   String output;
 
-  controlValues.shrinkToFit();  // optional
+  controlValues.shrinkToFit(); // optional
   serializeJson(controlValues, output);
   return output;
 }
@@ -134,15 +135,14 @@ uint16_t forwardIndex = 0; // Count of current readings for averaging
 uint16_t reverseIndex = 0; // Count of current readings for averaging
 
 float forwardCurrentReadings[MAX_SAMPLES];
-float reverseCurrentReadings[MAX_SAMPLES]; 
+float reverseCurrentReadings[MAX_SAMPLES];
 
 float alpha = 0.05; // smoothing factor for exponential weighted average
-float previousNegativeValue = 0.0;  
-float previousPositiveValue = 0.0;  
+float previousNegativeValue = 0.0;
+float previousPositiveValue = 0.0;
 bool isFirstPositiveSample = true;
 bool isFirstNegativeSample = true;
 bool hasResetPeakCurrent = false;
-
 
 // Define some GPIO connections between ESP32-S3 and DRV8706H-Q1
 const uint8_t VoltControl_PWM_Pin = 8; // GPIO 8 PWM Output will adjust 24V power supply output, PWM Setting=TargetVolts/TargetVoltsConversionFactor
@@ -158,10 +158,10 @@ const uint8_t nFaultPin = 17;          // Fault indicator output pulled low to i
 adc_continuous_handle_t adc_handle = NULL;
 adc_cali_handle_t adc_cali_handle = NULL;
 bool adc_calibrated = false;
-const int ADC_PIN = 2;                   // GPIO pin 2
-const int SAMPLE_RATE = 20000;           // 20 kHz sampling rate
-const unsigned long WINDOW_US = 40000;   // 40ms = 40,000 microseconds
-const int MAX_SAMPLES_NEW = 1000;        // Maximum samples to store per window
+const int ADC_PIN = 2;                       // GPIO pin 2
+const int SAMPLE_RATE = 20000;               // 20 kHz sampling rate
+const unsigned long WINDOW_US = 40000;       // 40ms = 40,000 microseconds
+const int MAX_SAMPLES_NEW = 1000;            // Maximum samples to store per window
 const int BUFFER_SIZE = MAX_SAMPLES_NEW * 4; // Larger buffer for continuous mode
 
 // Buffers and variables for ADC
@@ -170,7 +170,7 @@ float voltage_samples[MAX_SAMPLES_NEW];
 int sample_count = 0;
 unsigned long window_start_us = 0;
 unsigned long last_calculation = 0;
-float latestRaw = 0;                     // Latest raw ADC value
+float latestRaw = 0; // Latest raw ADC value
 
 // Define other ESP32-S3 GPIO connections
 const uint8_t testButton = 1; // Button pulls GPIO 01 to ground when pressed, currently used for testing
@@ -195,9 +195,9 @@ float TargetVolts = 18.0;
 uint32_t currentTime = 0;       // Store the current time in uS
 uint32_t currentTimeMillis = 0; // Store the current time in mS
 uint32_t reversestartTime = 0;  // Store the reversal cycle start time
-uint32_t reverseTimeUS = 40000;   // uS time between reversals
+uint32_t reverseTimeUS = 40000; // uS time between reversals
 uint32_t samplingstartTime = 0; // Store the sampling start time
-uint32_t samplingTime = 1000;    // uS between taking current measurements
+uint32_t samplingTime = 1000;   // uS between taking current measurements
 
 // Variables for storing sensor outputs
 float averageoutputCurrent = 0.0;   // Converted average current value
@@ -208,13 +208,14 @@ uint16_t SO_ADC;                    // raw, unscaled current output reading
 const float TargetVoltsConversionFactor = 0.0301686059427937; // Slope Value from calibration 16Jan2025
 
 // ADC Constants
-//const float CURRENT_ZERO_POINT = 2019;  
-//const float SLOPE = 51.1f;     
+// const float CURRENT_ZERO_POINT = 2019;
+// const float SLOPE = 51.1f;
 const float CURRENT_ZERO_POINT = 2045; // From calibration 7/5/25
-const float SLOPE = 52.1f;     // From calibration 7/5/25
+const float SLOPE = 52.1f;             // From calibration 7/5/25
 
 // New ADC functions
-void setup_adc_calibration() {
+void setup_adc_calibration()
+{
   // Initialize ADC calibration
   adc_cali_curve_fitting_config_t cali_config = {
       .unit_id = ADC_UNIT_1,
@@ -223,16 +224,20 @@ void setup_adc_calibration() {
   };
 
   esp_err_t ret = adc_cali_create_scheme_curve_fitting(&cali_config, &adc_cali_handle);
-  if (ret == ESP_OK) {
+  if (ret == ESP_OK)
+  {
     adc_calibrated = true;
     Serial.println("ADC calibration initialized successfully");
-  } else {
+  }
+  else
+  {
     Serial.println("ADC calibration failed, using raw values");
     adc_calibrated = false;
   }
 }
 
-void setup_adc_continuous() {
+void setup_adc_continuous()
+{
   // Configure ADC continuous mode
   adc_continuous_handle_cfg_t adc_config = {
       .max_store_buf_size = BUFFER_SIZE * 4,
@@ -240,7 +245,8 @@ void setup_adc_continuous() {
   };
 
   esp_err_t ret = adc_continuous_new_handle(&adc_config, &adc_handle);
-  if (ret != ESP_OK) {
+  if (ret != ESP_OK)
+  {
     Serial.printf("Failed to create ADC handle: %s\n", esp_err_to_name(ret));
     return;
   }
@@ -262,14 +268,16 @@ void setup_adc_continuous() {
   };
 
   ret = adc_continuous_config(adc_handle, &dig_cfg);
-  if (ret != ESP_OK) {
+  if (ret != ESP_OK)
+  {
     Serial.printf("Failed to configure ADC: %s\n", esp_err_to_name(ret));
     return;
   }
 
   // Start continuous conversion
   ret = adc_continuous_start(adc_handle);
-  if (ret != ESP_OK) {
+  if (ret != ESP_OK)
+  {
     Serial.printf("Failed to start ADC: %s\n", esp_err_to_name(ret));
     return;
   }
@@ -277,29 +285,39 @@ void setup_adc_continuous() {
   Serial.println("ADC continuous mode started successfully");
 }
 
-void process_adc_data() {
+void process_adc_data()
+{
   uint32_t bytes_read = 0;
   esp_err_t ret = adc_continuous_read(adc_handle, adc_buffer, sizeof(adc_buffer), &bytes_read, 0);
 
-  if (ret == ESP_OK && bytes_read > 0) {
+  if (ret == ESP_OK && bytes_read > 0)
+  {
     adc_digi_output_data_t *p = (adc_digi_output_data_t *)adc_buffer;
     uint32_t num_samples = bytes_read / sizeof(adc_digi_output_data_t);
 
-    for (uint32_t i = 0; i < num_samples && sample_count < MAX_SAMPLES_NEW; i++) {
+    for (uint32_t i = 0; i < num_samples && sample_count < MAX_SAMPLES_NEW; i++)
+    {
       // For ESP32-S3, use type2 format
-      if (p[i].type2.channel == ADC_CHANNEL_1 && p[i].type2.unit == ADC_UNIT_1) {
+      if (p[i].type2.channel == ADC_CHANNEL_1 && p[i].type2.unit == ADC_UNIT_1)
+      {
         uint32_t adc_raw = p[i].type2.data;
         latestRaw = adc_raw; // Store the latest raw value
 
-        if (adc_calibrated) {
+        if (adc_calibrated)
+        {
           int voltage_mv;
           esp_err_t ret = adc_cali_raw_to_voltage(adc_cali_handle, adc_raw, &voltage_mv);
-          if (ret == ESP_OK) {
+          if (ret == ESP_OK)
+          {
             voltage_samples[sample_count] = voltage_mv / 1000.0; // Convert to volts
-          } else {
+          }
+          else
+          {
             voltage_samples[sample_count] = (adc_raw * 3.3) / 4095.0; // Fallback calculation
           }
-        } else {
+        }
+        else
+        {
           voltage_samples[sample_count] = (adc_raw * 3.3) / 4095.0; // Raw calculation
         }
 
@@ -309,83 +327,22 @@ void process_adc_data() {
   }
 }
 
-/* //put function declarations here:
-
-Initialize WiFi
-void initWiFi() {
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  Serial.print("Connecting to WiFi ..");
-  while (WiFi.status() != WL_CONNECTED) {
-    Serial.print('.');
-    delay(1000);
-  }
-  Serial.println(WiFi.localIP());
-}
-
-void setupAP() {
-    // uint8_t mac[6];
-    // WiFi.macAddress(mac);
-    // snprintf(ap_ssid, sizeof(ap_ssid), "esp_%02X%02X%02X%02X%02X%02X", 
-    //         mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-
-    strncpy(ap_ssid, custom_ssid, sizeof(ap_ssid));
-
-    WiFi.softAPConfig(apIP, apIP, netMsk);
-    WiFi.softAP(ap_ssid, ap_password.c_str());
-    
-    dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
-    dnsServer.start(DNS_PORT, "*", apIP);
-    
-    Serial.print("Setting up AP: ");
-    Serial.println(ap_ssid);
-    Serial.print("AP IP: ");
-    Serial.println(WiFi.softAPIP());
-}
-
-void initWiFi() {
+void initWiFi()
+{
   WiFi.setHostname(hostname);
   WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  Serial.print("Connecting to WiFi ..");
-  
-  int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
-    Serial.print('.');
-    delay(500);
-    attempts++;
-  }
-  
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\nConnected! Hostname: " + String(hostname));
-    Serial.println("IP address: " + WiFi.localIP().toString());
-  } else {
-    Serial.println("\nFailed to connect to WiFi!");
-  }
-}
 
-void scanNetworks() {
-  Serial.println("Scanning networks...");
-  int n = WiFi.scanNetworks();
-  for (int i = 0; i < n; i++) {
-    Serial.printf("%s (%d dBm)\n", WiFi.SSID(i).c_str(), WiFi.RSSI(i));
-  }
-} */
-
-void initWiFi() {
-  WiFi.setHostname(hostname);
-  WiFi.mode(WIFI_STA);
-    
   // Add list of wifi networks
   wifiMulti.addAP("ExcitonClean", "sunnycarrot023");
   wifiMulti.addAP("ekotestbox01", "myvoiceismypassword");
   wifiMulti.addAP("SandersWifi", "ISsignum12");
   wifiMulti.addAP("ekotestbox02", "myvoiceismypassword");
 
-  //WiFi.begin(ssid, password);
+  // WiFi.begin(ssid, password);
   Serial.println("Connecting to WiFi...");
 
-  if(wifiMulti.run() == WL_CONNECTED) {
+  if (wifiMulti.run() == WL_CONNECTED)
+  {
     Serial.println("");
     Serial.println("WiFi connected");
     Serial.println("IP address: ");
@@ -393,16 +350,22 @@ void initWiFi() {
   }
 
   unsigned long startAttemptTime = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 20000) { // 20s timeout
+  while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 20000)
+  { // 20s timeout
     Serial.printf("WiFi Status: %d\n", WiFi.status());
     delay(500);
   }
 
-  if (WiFi.status() == WL_CONNECTED) {
+  if (WiFi.status() == WL_CONNECTED)
+  {
     Serial.println("\nConnected!");
-    Serial.print("SSID: "); Serial.println(WiFi.SSID());
-    Serial.print("IP: "); Serial.println(WiFi.localIP());
-  } else {
+    Serial.print("SSID: ");
+    Serial.println(WiFi.SSID());
+    Serial.print("IP: ");
+    Serial.println(WiFi.localIP());
+  }
+  else
+  {
     Serial.println("\nFailed to connect!");
     Serial.println("Possible causes:");
     Serial.println("- Wrong SSID/password");
@@ -412,21 +375,27 @@ void initWiFi() {
 }
 
 // Initialize LittleFS
-void initFS() {
-  if (!LittleFS.begin()) {
+void initFS()
+{
+  if (!LittleFS.begin())
+  {
     Serial.println("An error has occurred while mounting LittleFS");
   }
-  else{
-   Serial.println("LittleFS mounted successfully");
+  else
+  {
+    Serial.println("LittleFS mounted successfully");
   }
 }
 
 // HELPER FUNCTIONS
-// Check if string is an IP address
-bool isIp(String str) {
-  for (size_t i = 0; i < str.length(); i++) {
+
+bool isIp(String str)
+{ // Check if string is an IP address
+  for (size_t i = 0; i < str.length(); i++)
+  {
     int c = str.charAt(i);
-    if (c != '.' && (c < '0' || c > '9')) {
+    if (c != '.' && (c < '0' || c > '9'))
+    {
       return false;
     }
   }
@@ -434,15 +403,18 @@ bool isIp(String str) {
 }
 
 // Convert IPAddress to String
-String toStringIp(IPAddress ip) {
+String toStringIp(IPAddress ip)
+{
   return String(ip[0]) + "." + ip[1] + "." + ip[2] + "." + ip[3];
 }
 
-void notifyClients(String values) {
+void notifyClients(String values)
+{
   ws.textAll(values);
 }
 
-void resetPeakValues() {
+void resetPeakValues()
+{
   peakPositiveCurrent = 0.0;
   peakNegativeCurrent = 0.0;
   averagePositiveCurrent = 0.0;
@@ -462,7 +434,8 @@ void resetPeakValues() {
   reverseIndex = 0;
 }
 
-void setDefaultSettings() {
+void setDefaultSettings()
+{
   FValue1 = "14";
   FValue2 = "100";
   RValue2 = "100";
@@ -470,43 +443,50 @@ void setDefaultSettings() {
   ReverseTimeInt = RValue2.toInt();
 }
 
-bool saveSettings() {
+bool saveSettings()
+{
   JsonDocument doc;
   doc["FValue1"] = FValue1;
   doc["FValue2"] = FValue2;
   doc["RValue2"] = RValue2;
 
   File file = LittleFS.open("/settings.json", "w");
-  if (!file) {
+  if (!file)
+  {
     Serial.println("Failed to create settings file");
     return false;
   }
-  
-  if (serializeJson(doc, file)) {
+
+  if (serializeJson(doc, file))
+  {
     file.close();
     return true;
   }
-  
+
   file.close();
   return false;
 }
 
-bool loadSettings() {
-  if (!LittleFS.exists("/settings.json")) {
+bool loadSettings()
+{
+  if (!LittleFS.exists("/settings.json"))
+  {
     Serial.println("No settings file found. Creating with defaults.");
     setDefaultSettings();
-    return saveSettings(); 
+    return saveSettings();
   }
 
   File file = LittleFS.open("/settings.json", "r");
-  if (!file) {
+  if (!file)
+  {
     Serial.println("Failed to open settings file");
     return false;
   }
 
   JsonDocument doc;
   DeserializationError error = deserializeJson(doc, file);
-  if (error) {
+  if (error)
+  {
     Serial.println("Failed to parse settings file");
     file.close();
     return false;
@@ -519,79 +499,91 @@ bool loadSettings() {
 
   ForwardTimeInt = FValue2.toInt();
   ReverseTimeInt = RValue2.toInt();
-  
+
   file.close();
   return true;
 }
 
-void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
-  AwsFrameInfo *info = (AwsFrameInfo*)arg;
-  if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
+void handleWebSocketMessage(void *arg, uint8_t *data, size_t len)
+{
+  AwsFrameInfo *info = (AwsFrameInfo *)arg;
+  if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT)
+  {
     data[len] = 0;
-    message = (char*)data;
-    //Serial.println(message);
-    if(message.indexOf("toggle") >= 0) {
+    message = (char *)data;
+    // Serial.println(message);
+    if (message.indexOf("toggle") >= 0)
+    {
       Serial.println("Toggled state");
       isRunning = !isRunning;
       notifyClients(getValues());
     }
-    if (message.indexOf("1F") >= 0) {
+    if (message.indexOf("1F") >= 0)
+    {
       FValue1 = message.substring(2);
       dutyCycle1F = map(FValue1.toInt(), 0, 100, 0, 255);
-      //Serial.println(dutyCycle1F);
+      // Serial.println(dutyCycle1F);
       Serial.println(getValues());
       notifyClients(getValues());
       resetPeakValues();
-      saveSettings(); 
+      saveSettings();
     }
-    if (message.indexOf("2F") >= 0) {
+    if (message.indexOf("2F") >= 0)
+    {
       FValue2 = message.substring(2);
       ForwardTimeInt = FValue2.toInt();
       dutyCycle2F = map(ForwardTimeInt, 0, 100, 0, 255);
-      //Serial.println(dutyCycle2F);
+      // Serial.println(dutyCycle2F);
       Serial.println(getValues());
       notifyClients(getValues());
       resetPeakValues();
       saveSettings();
     }
-    if (message.indexOf("2R") >= 0) {
+    if (message.indexOf("2R") >= 0)
+    {
       RValue2 = message.substring(2);
       ReverseTimeInt = RValue2.toInt();
       dutyCycle2R = map(ReverseTimeInt, 0, 100, 0, 255);
-      //Serial.println(dutyCycle2R);
+      // Serial.println(dutyCycle2R);
       Serial.println(getValues());
       notifyClients(getValues());
       resetPeakValues();
       saveSettings();
     }
-    if(message.indexOf("resetPeakCurrent") >= 0) {
+    if (message.indexOf("resetPeakCurrent") >= 0)
+    {
       Serial.println("Resetting peak current values");
       resetPeakValues();
       notifyClients(getValues());
     }
-    if (strcmp((char*)data, "getValues") == 0) {
+    if (strcmp((char *)data, "getValues") == 0)
+    {
       notifyClients(getValues());
     }
   }
 }
-void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
-  switch (type) {
-    case WS_EVT_CONNECT:
-      Serial.printf("WebSocket client #%u connected from %s\n", client->id(), client->remoteIP().toString().c_str());
-      break;
-    case WS_EVT_DISCONNECT:
-      Serial.printf("WebSocket client #%u disconnected\n", client->id());
-      break;
-    case WS_EVT_DATA:
-      handleWebSocketMessage(arg, data, len);
-      break;
-    case WS_EVT_PONG:
-    case WS_EVT_ERROR:
-      break;
+
+void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len)
+{
+  switch (type)
+  {
+  case WS_EVT_CONNECT:
+    Serial.printf("WebSocket client #%u connected from %s\n", client->id(), client->remoteIP().toString().c_str());
+    break;
+  case WS_EVT_DISCONNECT:
+    Serial.printf("WebSocket client #%u disconnected\n", client->id());
+    break;
+  case WS_EVT_DATA:
+    handleWebSocketMessage(arg, data, len);
+    break;
+  case WS_EVT_PONG:
+  case WS_EVT_ERROR:
+    break;
   }
 }
 
-void initWebSocket() {
+void initWebSocket()
+{
   ws.onEvent(onEvent);
   server.addHandler(&ws);
 }
@@ -618,12 +610,14 @@ String processor(const String &var)
   return String();
 }
 
-void setup() {
+void setup()
+{
   Serial.begin(460800);
   delay(100);
 
   bool testAttach = ledcAttach(VoltControl_PWM_Pin, PWMFreq, outputBits);
-  if (!testAttach) Serial.println("Error in RSP1000-24 Control");
+  if (!testAttach)
+    Serial.println("Error in RSP1000-24 Control");
 
   pinMode(outputEnablePin, OUTPUT);
   pinMode(outputDirectionPin, OUTPUT);
@@ -644,11 +638,11 @@ void setup() {
 
   digitalWrite(nSleepPin, HIGH);
   Serial.println("DRV8706 Waking Up!");
-  //delay(100);
+  // delay(100);
 
   digitalWrite(DRVOffPin, LOW);
   Serial.println("DRV8706 Output Enabled! Outputs off...");
-  //delay(100);
+  // delay(100);
 
   rgbLedWrite(RGBLedPin, 0, 0, 0);
 
@@ -656,20 +650,19 @@ void setup() {
   initWiFi();
   initFS();
 
-  if (!loadSettings()) {
+  if (!loadSettings())
+  {
     Serial.println("Failed to load settings. Using defaults.");
     setDefaultSettings();
   }
 
   initWebSocket();
 
-  server.onNotFound([](AsyncWebServerRequest *request){
-    request->send(LittleFS, "/index.html", "text/html");
-  });
+  server.onNotFound([](AsyncWebServerRequest *request)
+                    { request->send(LittleFS, "/index.html", "text/html"); });
 
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(LittleFS, "/index.html", "text/html");
-  });
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
+            { request->send(LittleFS, "/index.html", "text/html"); });
 
   server.serveStatic("/", LittleFS, "/");
   server.begin();
@@ -686,9 +679,11 @@ const unsigned long reconnectInterval = 10000; // 10s
 
 void loop()
 {
- if (WiFi.status() != WL_CONNECTED) {
+  if (WiFi.status() != WL_CONNECTED)
+  {
     unsigned long currentMillis = millis();
-    if (currentMillis - lastReconnectAttempt >= reconnectInterval) {
+    if (currentMillis - lastReconnectAttempt >= reconnectInterval)
+    {
       Serial.println("Reconnecting to WiFi...");
       WiFi.disconnect();
       wifiMulti.run();
@@ -696,7 +691,8 @@ void loop()
     }
   }
 
-  if(peakPositiveVoltage == 0.0){
+  if (peakPositiveVoltage == 0.0)
+  {
     peakPositiveVoltage = FValue1.toFloat();
     peakNegativeVoltage = FValue1.toFloat();
     averagePositiveVoltage = FValue1.toFloat();
@@ -712,15 +708,18 @@ void loop()
   process_adc_data();
 
   // Check if 40ms window has elapsed and we have samples
-  if (currentTime - window_start_us >= WINDOW_US && sample_count > 0) {
+  if (currentTime - window_start_us >= WINDOW_US && sample_count > 0)
+  {
     // Calculate statistics for the window
     float max_voltage = 0.0;
     float sum_voltage = 0.0;
     float sum_raw = 0.0;
 
     // Find max and calculate sum for average
-    for (int i = 0; i < sample_count; i++) {
-      if (voltage_samples[i] > max_voltage) {
+    for (int i = 0; i < sample_count; i++)
+    {
+      if (voltage_samples[i] > max_voltage)
+      {
         max_voltage = voltage_samples[i];
       }
       sum_voltage += voltage_samples[i];
@@ -731,14 +730,14 @@ void loop()
 
     float avg_voltage = sum_voltage / sample_count;
     float avg_raw = sum_raw / sample_count;
-    
+
     // Use the average raw value for current calculation
     latestRaw = avg_raw;
-    
+
     // Print results with sample count for debugging
-    Serial.printf("ADC Stats - Max: %.3fV, Avg: %.3fV, Samples: %d\n", 
+    Serial.printf("ADC Stats - Max: %.3fV, Avg: %.3fV, Samples: %d\n",
                   max_voltage, avg_voltage, sample_count);
-    
+
     // Reset for next window
     sample_count = 0;
     window_start_us = currentTime;
@@ -746,7 +745,7 @@ void loop()
 
   if (isRunning == false)
   {
-    rgbLedWrite(48, 0, 0, 0); // led off
+    rgbLedWrite(48, 0, 0, 0);           // led off
     digitalWrite(outputEnablePin, LOW); // Deactivate outputs
   }
 
@@ -766,14 +765,17 @@ void loop()
       delay(250);
     }
 
-    if(outputDirection == false){
+    if (outputDirection == false)
+    {
       if (currentTime - reversestartTime >= ForwardTimeInt * 1000)
       {
         reversestartTime = currentTime;
         outputDirection = !outputDirection;
         digitalWrite(outputDirectionPin, outputDirection);
       }
-    } else {
+    }
+    else
+    {
       if (currentTime - reversestartTime >= ReverseTimeInt * 1000)
       {
         reversestartTime = currentTime;
@@ -787,58 +789,78 @@ void loop()
       samplingstartTime = currentTime;
       outputCurrent = (latestRaw - CURRENT_ZERO_POINT) / SLOPE; // Calculate current in Amps
 
-      if(isFirstPositiveSample && outputCurrent > 0.0){ 
+      if (isFirstPositiveSample && outputCurrent > 0.0)
+      {
         previousPositiveValue = outputCurrent;
         isFirstPositiveSample = false;
-      } else if(outputCurrent > 0.0){
+      }
+      else if (outputCurrent > 0.0)
+      {
         outputCurrent = alpha * outputCurrent + (1 - alpha) * previousPositiveValue;
         previousPositiveValue = outputCurrent;
       }
 
-      if(isFirstNegativeSample && outputCurrent < 0.0){
+      if (isFirstNegativeSample && outputCurrent < 0.0)
+      {
         previousNegativeValue = outputCurrent;
         isFirstNegativeSample = false;
-      } else if(outputCurrent < 0.0){
+      }
+      else if (outputCurrent < 0.0)
+      {
         outputCurrent = alpha * outputCurrent + (1 - alpha) * previousNegativeValue;
         previousNegativeValue = outputCurrent;
       }
 
-      if(outputDirection == true){
-        if(forwardIndex < MAX_SAMPLES && outputCurrent > 0){
+      if (outputDirection == true)
+      {
+        if (forwardIndex < MAX_SAMPLES && outputCurrent > 0)
+        {
           forwardCurrentReadings[forwardIndex] = outputCurrent;
           Serial.print(">ForwardCurrentReadings:");
           Serial.println(outputCurrent);
           forwardIndex++;
-        } else if(forwardIndex >= MAX_SAMPLES){
-          for(int i = 0; i < MAX_SAMPLES; i++){
+        }
+        else if (forwardIndex >= MAX_SAMPLES)
+        {
+          for (int i = 0; i < MAX_SAMPLES; i++)
+          {
             forwardSum += forwardCurrentReadings[i];
           }
-          averagePositiveCurrent = forwardSum / MAX_SAMPLES; 
+          averagePositiveCurrent = forwardSum / MAX_SAMPLES;
           forwardSum = 0.0;
           forwardIndex = 0;
           notifyClients(getValues());
         }
-      } else {
-        if(reverseIndex < MAX_SAMPLES && outputCurrent < 0){
+      }
+      else
+      {
+        if (reverseIndex < MAX_SAMPLES && outputCurrent < 0)
+        {
           reverseCurrentReadings[reverseIndex] = outputCurrent;
           Serial.print(">ReverseCurrentReadings:");
           Serial.println(outputCurrent);
           reverseIndex++;
-        } else if(reverseIndex >= MAX_SAMPLES){
-          for(int i = 0; i < MAX_SAMPLES; i++){
+        }
+        else if (reverseIndex >= MAX_SAMPLES)
+        {
+          for (int i = 0; i < MAX_SAMPLES; i++)
+          {
             reverseSum += reverseCurrentReadings[i];
           }
-          averageNegativeCurrent = reverseSum / MAX_SAMPLES; 
+          averageNegativeCurrent = reverseSum / MAX_SAMPLES;
           reverseSum = 0.0;
           reverseIndex = 0;
           notifyClients(getValues());
         }
       }
 
-      if(outputCurrent > peakPositiveCurrent){
+      if (outputCurrent > peakPositiveCurrent)
+      {
         peakPositiveCurrent = outputCurrent;
         notifyClients(getValues());
-      } else if(outputCurrent < peakNegativeCurrent){
+      }
+      else if (outputCurrent < peakNegativeCurrent)
+      {
         peakNegativeCurrent = outputCurrent;
         notifyClients(getValues());
       }
@@ -849,7 +871,7 @@ void loop()
       Serial.println(latestRaw);
     }
 
-    if(currentTimeMillis >= 60000 && !hasResetPeakCurrent)
+    if (currentTimeMillis >= 60000 && !hasResetPeakCurrent)
     {
       hasResetPeakCurrent = true;
       resetPeakValues();
