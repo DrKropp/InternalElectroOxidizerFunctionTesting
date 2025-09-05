@@ -161,14 +161,22 @@ bool adc_calibrated = false;
 const int ADC_PIN = 2;                   // GPIO pin 2
 const int SAMPLE_RATE = 20000;           // 20 kHz sampling rate
 const unsigned long WINDOW_US = 40000;   // 40ms = 40,000 microseconds
-const int MAX_SAMPLES_NEW = 1000;        // Maximum samples to store per window
+const int MAX_SAMPLES_NEW = 50;        // Maximum samples to store per window
 const int BUFFER_SIZE = MAX_SAMPLES_NEW * 4; // Larger buffer for continuous mode
 
 // Buffers and variables for ADC
 uint8_t adc_buffer[BUFFER_SIZE * sizeof(adc_digi_output_data_t)];
-float voltage_samples[MAX_SAMPLES_NEW];
-int sample_count = 0;
-unsigned long window_start_us = 0;
+//float voltage_samples[MAX_SAMPLES_NEW];
+//int sample_count = 0;
+//unsigned long window_start_us = 0;
+float latestCurrent = 0.0;
+uint32_t adc_sum = 0;
+uint32_t adc_count = 0;
+uint32_t positive_adc_sum = 0;
+uint32_t negative_adc_sum = 0;
+uint32_t positive_adc_count = 0;
+uint32_t negative_adc_count = 0;
+unsigned long last_adc_reset = 0;
 unsigned long last_calculation = 0;
 float latestRaw = 0;                     // Latest raw ADC value
 
@@ -285,92 +293,28 @@ void process_adc_data() {
     adc_digi_output_data_t *p = (adc_digi_output_data_t *)adc_buffer;
     uint32_t num_samples = bytes_read / sizeof(adc_digi_output_data_t);
 
-    for (uint32_t i = 0; i < num_samples && sample_count < MAX_SAMPLES_NEW; i++) {
-      // For ESP32-S3, use type2 format
+    for (uint32_t i = 0; i < num_samples; i++) {
       if (p[i].type2.channel == ADC_CHANNEL_1 && p[i].type2.unit == ADC_UNIT_1) {
         uint32_t adc_raw = p[i].type2.data;
-        latestRaw = adc_raw; // Store the latest raw value
+        latestRaw = adc_raw; // store the latest raw value
 
-        if (adc_calibrated) {
-          int voltage_mv;
-          esp_err_t ret = adc_cali_raw_to_voltage(adc_cali_handle, adc_raw, &voltage_mv);
-          if (ret == ESP_OK) {
-            voltage_samples[sample_count] = voltage_mv / 1000.0; // Convert to volts
-          } else {
-            voltage_samples[sample_count] = (adc_raw * 3.3) / 4095.0; // Fallback calculation
-          }
+        if(!outputDirection) {
+          positive_adc_sum += adc_raw;
+          positive_adc_count++;
         } else {
-          voltage_samples[sample_count] = (adc_raw * 3.3) / 4095.0; // Raw calculation
+          negative_adc_sum += adc_raw;
+          negative_adc_count++;
         }
-
-        sample_count++;
+        // adc_sum += adc_raw;
+        // adc_count++;
+        
+        // convert directly to current (no intermediate voltage conversion)
+        latestCurrent = (adc_raw - CURRENT_ZERO_POINT) / SLOPE;
       }
     }
   }
 }
 
-/* //put function declarations here:
-
-Initialize WiFi
-void initWiFi() {
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  Serial.print("Connecting to WiFi ..");
-  while (WiFi.status() != WL_CONNECTED) {
-    Serial.print('.');
-    delay(1000);
-  }
-  Serial.println(WiFi.localIP());
-}
-
-void setupAP() {
-    // uint8_t mac[6];
-    // WiFi.macAddress(mac);
-    // snprintf(ap_ssid, sizeof(ap_ssid), "esp_%02X%02X%02X%02X%02X%02X", 
-    //         mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-
-    strncpy(ap_ssid, custom_ssid, sizeof(ap_ssid));
-
-    WiFi.softAPConfig(apIP, apIP, netMsk);
-    WiFi.softAP(ap_ssid, ap_password.c_str());
-    
-    dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
-    dnsServer.start(DNS_PORT, "*", apIP);
-    
-    Serial.print("Setting up AP: ");
-    Serial.println(ap_ssid);
-    Serial.print("AP IP: ");
-    Serial.println(WiFi.softAPIP());
-}
-
-void initWiFi() {
-  WiFi.setHostname(hostname);
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  Serial.print("Connecting to WiFi ..");
-  
-  int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
-    Serial.print('.');
-    delay(500);
-    attempts++;
-  }
-  
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\nConnected! Hostname: " + String(hostname));
-    Serial.println("IP address: " + WiFi.localIP().toString());
-  } else {
-    Serial.println("\nFailed to connect to WiFi!");
-  }
-}
-
-void scanNetworks() {
-  Serial.println("Scanning networks...");
-  int n = WiFi.scanNetworks();
-  for (int i = 0; i < n; i++) {
-    Serial.printf("%s (%d dBm)\n", WiFi.SSID(i).c_str(), WiFi.RSSI(i));
-  }
-} */
 
 void initWiFi() {
   WiFi.setHostname(hostname);
@@ -676,7 +620,6 @@ void setup() {
 
   reversestartTime = micros();
   samplingstartTime = micros();
-  window_start_us = micros();
   last_calculation = millis();
   resetPeakValues();
 }
@@ -708,41 +651,14 @@ void loop()
   currentTime = micros();
   currentTimeMillis = millis();
 
-  // Process ADC data (this updates latestRaw and fills voltage_samples)
-  process_adc_data();
-
-  // Check if 40ms window has elapsed and we have samples
-  if (currentTime - window_start_us >= WINDOW_US && sample_count > 0) {
-    // Calculate statistics for the window
-    float max_voltage = 0.0;
-    float sum_voltage = 0.0;
-    float sum_raw = 0.0;
-
-    // Find max and calculate sum for average
-    for (int i = 0; i < sample_count; i++) {
-      if (voltage_samples[i] > max_voltage) {
-        max_voltage = voltage_samples[i];
-      }
-      sum_voltage += voltage_samples[i];
-      // For raw value calculation, we need to reconstruct from voltage
-      // Alternatively, we could store raw values separately
-      sum_raw += (voltage_samples[i] * 4095.0) / 3.3; // Reverse calculation
-    }
-
-    float avg_voltage = sum_voltage / sample_count;
-    float avg_raw = sum_raw / sample_count;
-    
-    // Use the average raw value for current calculation
-    latestRaw = avg_raw;
-    
-    // Print results with sample count for debugging
-    Serial.printf("ADC Stats - Max: %.3fV, Avg: %.3fV, Samples: %d\n", 
-                  max_voltage, avg_voltage, sample_count);
-    
-    // Reset for next window
-    sample_count = 0;
-    window_start_us = currentTime;
+  if (currentTime - reversestartTime < 1000) { // First ms of cycle
+    adc_sum = 0;
+    adc_count = 0;
   }
+
+
+  // Process ADC data (this updates latestCurrent and latestRaw)
+  process_adc_data();
 
   if (isRunning == false)
   {
@@ -782,6 +698,42 @@ void loop()
       }
     }
 
+    // Determine current cycle time based on direction
+    unsigned long current_cycle_time = outputDirection ? ForwardTimeInt * 1000 : ReverseTimeInt * 1000; 
+
+    if (currentTime - reversestartTime >= current_cycle_time - 1000) { // Last ms of cycle
+      if (adc_count > 0) {
+        float avg_raw = adc_sum / (float)adc_count;
+        float cycle_avg_current = (avg_raw - CURRENT_ZERO_POINT) / SLOPE;
+        
+        if (outputDirection) {
+          averagePositiveCurrent = cycle_avg_current;
+        } else {
+          averageNegativeCurrent = cycle_avg_current;
+          
+          // Apply saturation fix
+          if (fabs(averageNegativeCurrent) >= 1.1 * fabs(averagePositiveCurrent)) {
+            averageNegativeCurrent = -averagePositiveCurrent;
+          }
+        }
+      }
+    }
+
+    if (outputDirection) {
+      if (latestCurrent > peakPositiveCurrent) {
+        peakPositiveCurrent = latestCurrent;
+      }
+    } else {
+      if (latestCurrent < peakNegativeCurrent) {
+        peakNegativeCurrent = latestCurrent;
+        
+        // Apply saturation fix for peak current as well
+        if (fabs(peakNegativeCurrent) >= 1.1 * fabs(peakPositiveCurrent)) {
+          peakNegativeCurrent = -peakPositiveCurrent;
+        }
+      }
+    }
+    /*
     if (currentTime - samplingstartTime >= samplingTime && currentTime >= 100000)
     {
       samplingstartTime = currentTime;
@@ -831,16 +783,16 @@ void loop()
           averageNegativeCurrent = reverseSum / MAX_SAMPLES; 
           reverseSum = 0.0;
           reverseIndex = 0;
-          notifyClients(getValues());
+          //notifyClients(getValues());
         }
       }
 
       if(outputCurrent > peakPositiveCurrent){
         peakPositiveCurrent = outputCurrent;
-        notifyClients(getValues());
+        //notifyClients(getValues());
       } else if(outputCurrent < peakNegativeCurrent){
         peakNegativeCurrent = outputCurrent;
-        notifyClients(getValues());
+        //notifyClients(getValues());
       }
 
       Serial.print(">SOADC:");
@@ -848,11 +800,15 @@ void loop()
       Serial.print(">SOADC2:");
       Serial.println(latestRaw);
     }
+    */
 
     if(currentTimeMillis >= 60000 && !hasResetPeakCurrent)
     {
       hasResetPeakCurrent = true;
       resetPeakValues();
+      notifyClients(getValues());
+    }
+    if (currentTime - reversestartTime >= current_cycle_time - 100) {
       notifyClients(getValues());
     }
   }
