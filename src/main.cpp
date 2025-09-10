@@ -158,10 +158,6 @@ const uint8_t nFaultPin = 17;          // Fault indicator output pulled low to i
 adc_continuous_handle_t adc_handle = NULL;
 adc_cali_handle_t adc_cali_handle = NULL;
 bool adc_calibrated = false;
-const int ADC_PIN = 2;                   // GPIO pin 2
-const int SAMPLE_RATE = 20000;           // 20 kHz sampling rate
-const unsigned long WINDOW_US = 40000;   // 40ms = 40,000 microseconds
-const int MAX_SAMPLES_NEW = 50;        // Maximum samples to store per window
 const int ADC_PIN = 2;                       // GPIO pin 2
 const int SAMPLE_RATE = 20000;               // 20 kHz sampling rate
 const unsigned long WINDOW_US = 40000;       // 40ms = 40,000 microseconds
@@ -170,9 +166,10 @@ const int BUFFER_SIZE = MAX_SAMPLES_NEW * 4; // Larger buffer for continuous mod
 
 // Buffers and variables for ADC
 uint8_t adc_buffer[BUFFER_SIZE * sizeof(adc_digi_output_data_t)];
-//float voltage_samples[MAX_SAMPLES_NEW];
-//int sample_count = 0;
-//unsigned long window_start_us = 0;
+float voltage_samples[MAX_SAMPLES_NEW];
+int sample_count = 0;
+unsigned long window_start_us = 0;
+unsigned long last_calculation = 0;
 float latestCurrent = 0.0;
 uint32_t adc_sum = 0;
 uint32_t adc_count = 0;
@@ -297,67 +294,37 @@ void setup_adc_continuous()
   Serial.println("ADC continuous mode started successfully");
 }
 
-void process_adc_data()
-{
-  uint32_t bytes_read = 0;
-  esp_err_t ret = adc_continuous_read(adc_handle, adc_buffer, sizeof(adc_buffer), &bytes_read, 0);
-
-  if (ret == ESP_OK && bytes_read > 0)
-  {
-    adc_digi_output_data_t *p = (adc_digi_output_data_t *)adc_buffer;
-    uint32_t num_samples = bytes_read / sizeof(adc_digi_output_data_t);
-
-    for (uint32_t i = 0; i < num_samples; i++) {
-      if (p[i].type2.channel == ADC_CHANNEL_1 && p[i].type2.unit == ADC_UNIT_1) {
-    for (uint32_t i = 0; i < num_samples && sample_count < MAX_SAMPLES_NEW; i++)
-    {
-      // For ESP32-S3, use type2 format
-      if (p[i].type2.channel == ADC_CHANNEL_1 && p[i].type2.unit == ADC_UNIT_1)
-      {
-        uint32_t adc_raw = p[i].type2.data;
-        latestRaw = adc_raw; // store the latest raw value
-
-        if(!outputDirection) {
-          positive_adc_sum += adc_raw;
-          positive_adc_count++;
-        } else {
-          negative_adc_sum += adc_raw;
-          negative_adc_count++;
-        }
-        // adc_sum += adc_raw;
-        // adc_count++;
-        
-        // convert directly to current (no intermediate voltage conversion)
-        latestCurrent = (adc_raw - CURRENT_ZERO_POINT) / SLOPE;
-      }
-    }
-  }
-}
+void process_adc_data() {
+ uint32_t bytes_read = 0;
+ esp_err_t ret = adc_continuous_read(adc_handle, adc_buffer, sizeof(adc_buffer), &bytes_read, 0);
 
 
-void initWiFi() {
-        if (adc_calibrated)
-        {
-          int voltage_mv;
-          esp_err_t ret = adc_cali_raw_to_voltage(adc_cali_handle, adc_raw, &voltage_mv);
-          if (ret == ESP_OK)
-          {
-            voltage_samples[sample_count] = voltage_mv / 1000.0; // Convert to volts
-          }
-          else
-          {
-            voltage_samples[sample_count] = (adc_raw * 3.3) / 4095.0; // Fallback calculation
-          }
-        }
-        else
-        {
-          voltage_samples[sample_count] = (adc_raw * 3.3) / 4095.0; // Raw calculation
-        }
+ if (ret == ESP_OK && bytes_read > 0) {
+   adc_digi_output_data_t *p = (adc_digi_output_data_t *)adc_buffer;
+   uint32_t num_samples = bytes_read / sizeof(adc_digi_output_data_t);
 
-        sample_count++;
-      }
-    }
-  }
+
+   for (uint32_t i = 0; i < num_samples; i++) {
+     if (p[i].type2.channel == ADC_CHANNEL_1 && p[i].type2.unit == ADC_UNIT_1) {
+       uint32_t adc_raw = p[i].type2.data;
+       latestRaw = adc_raw; // store the latest raw value
+
+
+       if(!outputDirection) {
+         positive_adc_sum += adc_raw;
+         positive_adc_count++;
+       } else {
+         negative_adc_sum += adc_raw;
+         negative_adc_count++;
+       }
+       // adc_sum += adc_raw;
+       // adc_count++;
+      
+       // convert directly to current (no intermediate voltage conversion)
+       latestCurrent = (adc_raw - CURRENT_ZERO_POINT) / SLOPE;
+     }
+   }
+ }
 }
 
 void initWiFi()
@@ -702,6 +669,7 @@ void setup()
 
   reversestartTime = micros();
   samplingstartTime = micros();
+  window_start_us = micros();
   last_calculation = millis();
   resetPeakValues();
 }
@@ -711,251 +679,130 @@ const unsigned long reconnectInterval = 10000; // 10s
 
 void loop()
 {
-  if (WiFi.status() != WL_CONNECTED)
-  {
-    unsigned long currentMillis = millis();
-    if (currentMillis - lastReconnectAttempt >= reconnectInterval)
-    {
-      Serial.println("Reconnecting to WiFi...");
-      WiFi.disconnect();
-      wifiMulti.run();
-      lastReconnectAttempt = currentMillis;
-    }
-  }
-
-  if (peakPositiveVoltage == 0.0)
-  {
-    peakPositiveVoltage = FValue1.toFloat();
-    peakNegativeVoltage = FValue1.toFloat();
-    averagePositiveVoltage = FValue1.toFloat();
-    averageNegativeVoltage = FValue1.toFloat();
-  }
-
-  ws.cleanupClients();
-
-  currentTime = micros();
-  currentTimeMillis = millis();
-
-  if (currentTime - reversestartTime < 1000) { // First ms of cycle
-    adc_sum = 0;
-    adc_count = 0;
-  }
+if (WiFi.status() != WL_CONNECTED) {
+   unsigned long currentMillis = millis();
+   if (currentMillis - lastReconnectAttempt >= reconnectInterval) {
+     Serial.println("Reconnecting to WiFi...");
+     WiFi.disconnect();
+     wifiMulti.run();
+     lastReconnectAttempt = currentMillis;
+   }
+ }
 
 
-  // Process ADC data (this updates latestCurrent and latestRaw)
-  process_adc_data();
+ if(peakPositiveVoltage == 0.0){
+   peakPositiveVoltage = FValue1.toFloat();
+   peakNegativeVoltage = FValue1.toFloat();
+   averagePositiveVoltage = FValue1.toFloat();
+   averageNegativeVoltage = FValue1.toFloat();
+ }
 
-  // Check if 40ms window has elapsed and we have samples
-  if (currentTime - window_start_us >= WINDOW_US && sample_count > 0)
-  {
-    // Calculate statistics for the window
-    float max_voltage = 0.0;
-    float sum_voltage = 0.0;
-    float sum_raw = 0.0;
 
-    // Find max and calculate sum for average
-    for (int i = 0; i < sample_count; i++)
-    {
-      if (voltage_samples[i] > max_voltage)
-      {
-        max_voltage = voltage_samples[i];
-      }
-      sum_voltage += voltage_samples[i];
-      // For raw value calculation, we need to reconstruct from voltage
-      // Alternatively, we could store raw values separately
-      sum_raw += (voltage_samples[i] * 4095.0) / 3.3; // Reverse calculation
-    }
+ ws.cleanupClients();
 
-    float avg_voltage = sum_voltage / sample_count;
-    float avg_raw = sum_raw / sample_count;
 
-    // Use the average raw value for current calculation
-    latestRaw = avg_raw;
+ currentTime = micros();
+ currentTimeMillis = millis();
 
-    // Print results with sample count for debugging
-    Serial.printf("ADC Stats - Max: %.3fV, Avg: %.3fV, Samples: %d\n",
-                  max_voltage, avg_voltage, sample_count);
 
-    // Reset for next window
-    sample_count = 0;
-    window_start_us = currentTime;
-  }
+ if (currentTime - reversestartTime < 1000) { // First ms of cycle
+   adc_sum = 0;
+   adc_count = 0;
+ }
 
-  if (isRunning == false)
-  {
-    rgbLedWrite(48, 0, 0, 0);           // led off
-    digitalWrite(outputEnablePin, LOW); // Deactivate outputs
-  }
 
-  if (isRunning == true)
-  {
-    rgbLedWrite(48, 128, 0, 0);          // Bright red to show outputs are active
-    digitalWrite(outputEnablePin, HIGH); // Activate Outputs !Possible Danger! Should see PVDD on output!
 
-    // Get the output voltage
-    VoltControl_PWM = round((FValue1.toFloat()) / TargetVoltsConversionFactor);
-    ledcWrite(VoltControl_PWM_Pin, VoltControl_PWM);
 
-    if (digitalRead(testButton) == LOW)
-    {
-      digitalWrite(outputEnablePin, LOW);
-      isRunning = false;
-      delay(250);
-    }
+ // Process ADC data (this updates latestCurrent and latestRaw)
+ process_adc_data();
 
-    if (outputDirection == false)
-    {
-      if (currentTime - reversestartTime >= ForwardTimeInt * 1000)
-      {
-        reversestartTime = currentTime;
-        outputDirection = !outputDirection;
-        digitalWrite(outputDirectionPin, outputDirection);
-      }
-    }
-    else
-    {
-      if (currentTime - reversestartTime >= ReverseTimeInt * 1000)
-      {
-        reversestartTime = currentTime;
-        outputDirection = !outputDirection;
-        digitalWrite(outputDirectionPin, outputDirection);
-      }
-    }
 
-    // Determine current cycle time based on direction
-    unsigned long current_cycle_time = outputDirection ? ForwardTimeInt * 1000 : ReverseTimeInt * 1000; 
+ if (isRunning == false)
+ {
+   rgbLedWrite(48, 0, 0, 0); // led off
+   digitalWrite(outputEnablePin, LOW); // Deactivate outputs
+ }
 
-    if (currentTime - reversestartTime >= current_cycle_time - 1000) { // Last ms of cycle
-      if (adc_count > 0) {
-        float avg_raw = adc_sum / (float)adc_count;
-        float cycle_avg_current = (avg_raw - CURRENT_ZERO_POINT) / SLOPE;
+
+ if (isRunning == true)
+ {
+   rgbLedWrite(48, 128, 0, 0);          // Bright red to show outputs are active
+   digitalWrite(outputEnablePin, HIGH); // Activate Outputs !Possible Danger! Should see PVDD on output!
+
+
+   // Get the output voltage
+   VoltControl_PWM = round((FValue1.toFloat()) / TargetVoltsConversionFactor);
+   ledcWrite(VoltControl_PWM_Pin, VoltControl_PWM);
+
+
+   if (digitalRead(testButton) == LOW)
+   {
+     digitalWrite(outputEnablePin, LOW);
+     isRunning = false;
+     delay(250);
+   }
+
+
+   if(outputDirection == false){
+     if (currentTime - reversestartTime >= ForwardTimeInt * 1000)
+     {
+       reversestartTime = currentTime;
+       outputDirection = !outputDirection;
+       digitalWrite(outputDirectionPin, outputDirection);
+     }
+   } else {
+     if (currentTime - reversestartTime >= ReverseTimeInt * 1000)
+     {
+       reversestartTime = currentTime;
+       outputDirection = !outputDirection;
+       digitalWrite(outputDirectionPin, outputDirection);
+     }
+   }
+
+   unsigned long current_cycle_time = outputDirection ? ForwardTimeInt * 1000 : ReverseTimeInt * 1000;
+
+
+   if (currentTime - reversestartTime >= current_cycle_time - 1000) { // Last ms of cycle
+     if (adc_count > 0) {
+       float avg_raw = adc_sum / (float)adc_count;
+       float cycle_avg_current = (avg_raw - CURRENT_ZERO_POINT) / SLOPE;
+      
+       if (outputDirection) {
+         averagePositiveCurrent = cycle_avg_current;
+       } else {
+         averageNegativeCurrent = cycle_avg_current;
         
-        if (outputDirection) {
-          averagePositiveCurrent = cycle_avg_current;
-        } else {
-          averageNegativeCurrent = cycle_avg_current;
-          
-          // Apply saturation fix
-          if (fabs(averageNegativeCurrent) >= 1.1 * fabs(averagePositiveCurrent)) {
-            averageNegativeCurrent = -averagePositiveCurrent;
-          }
-        }
-      }
-    }
+         // Apply saturation fix
+         if (fabs(averageNegativeCurrent) >= 1.1 * fabs(averagePositiveCurrent)) {
+           averageNegativeCurrent = -averagePositiveCurrent;
+         }
+       }
+     }
+   }
 
-    if (outputDirection) {
-      if (latestCurrent > peakPositiveCurrent) {
-        peakPositiveCurrent = latestCurrent;
-      }
-    } else {
-      if (latestCurrent < peakNegativeCurrent) {
-        peakNegativeCurrent = latestCurrent;
-        
-        // Apply saturation fix for peak current as well
-        if (fabs(peakNegativeCurrent) >= 1.1 * fabs(peakPositiveCurrent)) {
-          peakNegativeCurrent = -peakPositiveCurrent;
-        }
-      }
-    }
-    /*
-    if (currentTime - samplingstartTime >= samplingTime && currentTime >= 100000)
-    {
-      samplingstartTime = currentTime;
-      outputCurrent = (latestRaw - CURRENT_ZERO_POINT) / SLOPE; // Calculate current in Amps
+   if (outputDirection) {
+     if (latestCurrent > peakPositiveCurrent) {
+       peakPositiveCurrent = latestCurrent;
+     }
+   } else {
+     if (latestCurrent < peakNegativeCurrent) {
+       peakNegativeCurrent = latestCurrent;
+      
+       // Apply saturation fix for peak current as well
+       if (fabs(peakNegativeCurrent) >= 1.1 * fabs(peakPositiveCurrent)) {
+         peakNegativeCurrent = -peakPositiveCurrent;
+       }
+     }
+   }
 
-      if (isFirstPositiveSample && outputCurrent > 0.0)
-      {
-        previousPositiveValue = outputCurrent;
-        isFirstPositiveSample = false;
-      }
-      else if (outputCurrent > 0.0)
-      {
-        outputCurrent = alpha * outputCurrent + (1 - alpha) * previousPositiveValue;
-        previousPositiveValue = outputCurrent;
-      }
-
-      if (isFirstNegativeSample && outputCurrent < 0.0)
-      {
-        previousNegativeValue = outputCurrent;
-        isFirstNegativeSample = false;
-      }
-      else if (outputCurrent < 0.0)
-      {
-        outputCurrent = alpha * outputCurrent + (1 - alpha) * previousNegativeValue;
-        previousNegativeValue = outputCurrent;
-      }
-
-      if (outputDirection == true)
-      {
-        if (forwardIndex < MAX_SAMPLES && outputCurrent > 0)
-        {
-          forwardCurrentReadings[forwardIndex] = outputCurrent;
-          Serial.print(">ForwardCurrentReadings:");
-          Serial.println(outputCurrent);
-          forwardIndex++;
-        }
-        else if (forwardIndex >= MAX_SAMPLES)
-        {
-          for (int i = 0; i < MAX_SAMPLES; i++)
-          {
-            forwardSum += forwardCurrentReadings[i];
-          }
-          averagePositiveCurrent = forwardSum / MAX_SAMPLES;
-          forwardSum = 0.0;
-          forwardIndex = 0;
-          notifyClients(getValues());
-        }
-      }
-      else
-      {
-        if (reverseIndex < MAX_SAMPLES && outputCurrent < 0)
-        {
-          reverseCurrentReadings[reverseIndex] = outputCurrent;
-          Serial.print(">ReverseCurrentReadings:");
-          Serial.println(outputCurrent);
-          reverseIndex++;
-        }
-        else if (reverseIndex >= MAX_SAMPLES)
-        {
-          for (int i = 0; i < MAX_SAMPLES; i++)
-          {
-            reverseSum += reverseCurrentReadings[i];
-          }
-          averageNegativeCurrent = reverseSum / MAX_SAMPLES;
-          reverseSum = 0.0;
-          reverseIndex = 0;
-          //notifyClients(getValues());
-        }
-      }
-
-      if (outputCurrent > peakPositiveCurrent)
-      {
-        peakPositiveCurrent = outputCurrent;
-        //notifyClients(getValues());
-      } else if(outputCurrent < peakNegativeCurrent){
-        notifyClients(getValues());
-      }
-      else if (outputCurrent < peakNegativeCurrent)
-      {
-        peakNegativeCurrent = outputCurrent;
-        //notifyClients(getValues());
-      }
-
-      Serial.print(">SOADC:");
-      Serial.println(outputCurrent);
-      Serial.print(">SOADC2:");
-      Serial.println(latestRaw);
-    }
-    */
-
-    if (currentTimeMillis >= 60000 && !hasResetPeakCurrent)
-    {
-      hasResetPeakCurrent = true;
-      resetPeakValues();
-      notifyClients(getValues());
-    }
-    if (currentTime - reversestartTime >= current_cycle_time - 100) {
-      notifyClients(getValues());
-    }
-  }
+   if(currentTimeMillis >= 60000 && !hasResetPeakCurrent)
+   {
+     hasResetPeakCurrent = true;
+     resetPeakValues();
+     notifyClients(getValues());
+   }
+   if (currentTime - reversestartTime >= current_cycle_time - 100) {
+     notifyClients(getValues());
+   }
+ }
 }
