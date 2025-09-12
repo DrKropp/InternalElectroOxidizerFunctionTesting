@@ -272,6 +272,7 @@ void initWiFi() {
   WiFi.mode(WIFI_STA);
     
   // Add list of wifi networks
+  wifiMulti.addAP("ORT", "4orinonly");
   wifiMulti.addAP("ExcitonClean", "sunnycarrot023");
   wifiMulti.addAP("ekotestbox01", "myvoiceismypassword");
   wifiMulti.addAP("SandersWifi", "ISsignum12");
@@ -684,7 +685,6 @@ void loop()
               averagePositiveCurrent = forwardSum / MAX_SAMPLES; 
               forwardSum = 0.0;
               forwardIndex = 0;
-              notifyClients(getValues());
             }
           } else { // Reverse direction
             if(reverseIndex < MAX_SAMPLES && outputCurrent < 0){
@@ -699,24 +699,24 @@ void loop()
               averageNegativeCurrent = reverseSum / MAX_SAMPLES; 
               reverseSum = 0.0;
               reverseIndex = 0;
-              notifyClients(getValues());
             }
           }
 
           if(outputCurrent > peakPositiveCurrent){ // sets peak current numbers
             peakPositiveCurrent = outputCurrent;
-            notifyClients(getValues());
           } else if(outputCurrent < peakNegativeCurrent){
             peakNegativeCurrent = outputCurrent;
-            notifyClients(getValues());
           }
 
-          Serial.print(">SOADC:"); // Send formatted serial output to Teleplot serial data plotter
+          
+
+          Serial.print(">CURRENT:"); // Send formatted serial output to Teleplot serial data plotter
           Serial.println(outputCurrent);
 
-          Serial.print(">SOADC2:");
+          Serial.print(">AVERAGERAW:");
           Serial.println(result[0].avg_read_raw);
 
+          notifyClients(getValues());
           analogContinuousStart(); // Start ADC conversions and wait for callback function to set adc_conversion_done flag to true
         }
         else
