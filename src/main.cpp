@@ -198,80 +198,16 @@ uint16_t SO_ADC;                    // raw, unscaled current output reading
 // Some other constants
 const float TargetVoltsConversionFactor = 0.0301686059427937; // Slope Value from calibration 16Jan2025
 
-// ADC Constants
-//const float CURRENT_ZERO_POINT = 2019;  
-//const float SLOPE = 51.1f;     
-const float CURRENT_ZERO_POINT = 2045; // From calibration 7/5/25
-const float SLOPE = 52.1f;     // From calibration 7/5/25
-
-/* //put function declarations here:
-
-Initialize WiFi
-void initWiFi() {
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  Serial.print("Connecting to WiFi ..");
-  while (WiFi.status() != WL_CONNECTED) {
-    Serial.print('.');
-    delay(1000);
-  }
-  Serial.println(WiFi.localIP());
-}
-
-void setupAP() {
-    // uint8_t mac[6];
-    // WiFi.macAddress(mac);
-    // snprintf(ap_ssid, sizeof(ap_ssid), "esp_%02X%02X%02X%02X%02X%02X", 
-    //         mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-
-    strncpy(ap_ssid, custom_ssid, sizeof(ap_ssid));
-
-    WiFi.softAPConfig(apIP, apIP, netMsk);
-    WiFi.softAP(ap_ssid, ap_password.c_str());
-    
-    dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
-    dnsServer.start(DNS_PORT, "*", apIP);
-    
-    Serial.print("Setting up AP: ");
-    Serial.println(ap_ssid);
-    Serial.print("AP IP: ");
-    Serial.println(WiFi.softAPIP());
-}
-
-void initWiFi() {
-  WiFi.setHostname(hostname);
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  Serial.print("Connecting to WiFi ..");
-  
-  int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
-    Serial.print('.');
-    delay(500);
-    attempts++;
-  }
-  
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\nConnected! Hostname: " + String(hostname));
-    Serial.println("IP address: " + WiFi.localIP().toString());
-  } else {
-    Serial.println("\nFailed to connect to WiFi!");
-  }
-}
-
-void scanNetworks() {
-  Serial.println("Scanning networks...");
-  int n = WiFi.scanNetworks();
-  for (int i = 0; i < n; i++) {
-    Serial.printf("%s (%d dBm)\n", WiFi.SSID(i).c_str(), WiFi.RSSI(i));
-  }
-} */
+// ADC Constants 
+const float INTERCEPT = -7.11166481117379f; // From calibration 7/5/25
+const float SLOPE = 0.00353825655865396f;     // From calibration 9/12/25
 
 void initWiFi() {
   WiFi.setHostname(hostname);
   WiFi.mode(WIFI_STA);
     
   // Add list of wifi networks
+  wifiMulti.addAP("ORT", "4orinonly");
   wifiMulti.addAP("ExcitonClean", "sunnycarrot023");
   wifiMulti.addAP("ekotestbox01", "myvoiceismypassword");
   wifiMulti.addAP("SandersWifi", "ISsignum12");
@@ -652,7 +588,7 @@ void loop()
         {
           analogContinuousStop(); // Stop ADC Continuous conversions to have more time to process (print) the data
 
-          outputCurrent = ((result[0].avg_read_raw)-CURRENT_ZERO_POINT)/SLOPE; // Current Reading in Amps
+          outputCurrent = ((result[0].avg_read_raw)*SLOPE) + INTERCEPT; // Current Reading in Amps
 
           if(isFirstPositiveSample && outputCurrent > 0.0){ 
             previousPositiveValue = outputCurrent;
@@ -711,10 +647,17 @@ void loop()
             notifyClients(getValues());
           }
 
-          Serial.print(">SOADC:"); // Send formatted serial output to Teleplot serial data plotter
+          if (fabs(peakNegativeCurrent) >= 1.1 * fabs(peakPositiveCurrent)) {
+            peakNegativeCurrent = -peakPositiveCurrent;
+          }
+          if(fabs(averageNegativeCurrent) >= 1.1 * fabs(averagePositiveCurrent)){
+            averageNegativeCurrent = -averagePositiveCurrent;
+          }
+
+          Serial.print(">CURRENT:"); // Send formatted serial output to Teleplot serial data plotter
           Serial.println(outputCurrent);
 
-          Serial.print(">SOADC2:");
+          Serial.print(">AVERAGERAW:");
           Serial.println(result[0].avg_read_raw);
 
           analogContinuousStart(); // Start ADC conversions and wait for callback function to set adc_conversion_done flag to true
@@ -724,9 +667,6 @@ void loop()
           Serial.println("Error occurred during reading data. Set Core Debug Level to error or lower for more information.");
         }
       }
-      // SO_ADC = analogRead(SO_Pin);
-      // Serial.print(">SOADC:");
-      // Serial.println(SO_ADC);
     }
 
     if(currentTimeMillis >= 60000 && !hasResetPeakCurrent)
