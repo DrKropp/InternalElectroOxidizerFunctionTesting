@@ -199,7 +199,7 @@ uint16_t SO_ADC;                    // raw, unscaled current output reading
 const float TargetVoltsConversionFactor = 0.0301686059427937; // Slope Value from calibration 16Jan2025
 
 // ADC Constants 
-const float INTERCEPT = -7.11166481117379f; // From calibration 7/5/25
+const float INTERCEPT = -7.11166481117379f; // From calibration 9/12/25
 const float SLOPE = 0.00353825655865396f;     // From calibration 9/12/25
 
 void initWiFi() {
@@ -207,6 +207,7 @@ void initWiFi() {
   WiFi.mode(WIFI_STA);
     
   // Add list of wifi networks
+  wifiMulti.addAP("Hogwarts Express", "ghy343Ai9");
   wifiMulti.addAP("ORT", "4orinonly");
   wifiMulti.addAP("ExcitonClean", "sunnycarrot023");
   wifiMulti.addAP("ekotestbox01", "myvoiceismypassword");
