@@ -131,7 +131,7 @@ function toggleOn() {
 
 function handleUpdate() {
     if(isArmed) {
-        alert("Cannot change values while device is on!");
+        alert("Cannot change values while device output is on!");
         return;
     }
     if (!selectedCard || isArmed) return;
@@ -166,7 +166,7 @@ var selectedCardState = 'F'; // 'F' = Forward, 'R' = Reverse - 'F' is default
 
 function selectCard(element){
     if(isArmed){
-        alert("Cannot change values while device is on!");
+        alert("Cannot change values while device output is on!");
         return;
     }
     if(selectedCard == element){
