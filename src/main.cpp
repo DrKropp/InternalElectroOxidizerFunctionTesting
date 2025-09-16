@@ -113,8 +113,8 @@ String getValues()
   controlValues["RValue2"] = String(RValue2);
   controlValues["peakPositiveCurrent"] = String(peakPositiveCurrent, 3);
   controlValues["peakNegativeCurrent"] = String(peakNegativeCurrent, 3);
-  controlValues["averagePositiveCurrent"] = String(averagePositiveCurrent, 3);  // Use display variable
-  controlValues["averageNegativeCurrent"] = String(averageNegativeCurrent, 3);  // Use display variable
+  controlValues["averagePositiveCurrent"] = String(averagePositiveCurrent, 3); // Use display variable
+  controlValues["averageNegativeCurrent"] = String(averageNegativeCurrent, 3); // Use display variable
   controlValues["peakPositiveVoltage"] = String(peakPositiveVoltage);
   controlValues["peakNegativeVoltage"] = String(peakNegativeVoltage);
   controlValues["averagePositiveVoltage"] = String(averagePositiveVoltage);
@@ -214,13 +214,13 @@ uint16_t SO_ADC;                    // raw, unscaled current output reading
 // Some other constants
 const float TargetVoltsConversionFactor = 0.0301686059427937; // Slope Value from calibration 16Jan2025
 
-// temp 
+// temp
 unsigned long lastNotifyTime = 0;
 const unsigned long notifyInterval = 100;
 
 // ADC Constants
 const float INTERCEPT = -7.11166481117379f; // From calibration 9/12/25
-const float SLOPE = 0.00353825655865396f;     // From calibration 9/12/25
+const float SLOPE = 0.00353825655865396f;   // From calibration 9/12/25
 
 // New ADC functions
 void setup_adc_calibration()
@@ -294,32 +294,41 @@ void setup_adc_continuous()
   Serial.println("ADC continuous mode started successfully");
 }
 
-void process_adc_data() {
+void process_adc_data()
+{
   uint32_t bytes_read = 0;
   esp_err_t ret = adc_continuous_read(adc_handle, adc_buffer, sizeof(adc_buffer), &bytes_read, 0);
 
   // Capture the current direction at the start of processing this batch
   bool currentDirection = outputDirection;
 
-  if (ret == ESP_OK && bytes_read > 0) {
+  if (ret == ESP_OK && bytes_read > 0)
+  {
     adc_digi_output_data_t *p = (adc_digi_output_data_t *)adc_buffer;
     uint32_t num_samples = bytes_read / sizeof(adc_digi_output_data_t);
 
-    for (uint32_t i = 0; i < num_samples; i++) {
-      if (p[i].type2.channel == ADC_CHANNEL_1 && p[i].type2.unit == ADC_UNIT_1) {
+    for (uint32_t i = 0; i < num_samples; i++)
+    {
+      if (p[i].type2.channel == ADC_CHANNEL_1 && p[i].type2.unit == ADC_UNIT_1)
+      {
         uint32_t adc_raw = p[i].type2.data;
 
         latestRaw = adc_raw;
         latestCurrent = (adc_raw * SLOPE) + INTERCEPT;
 
         // Accumulate sums separately by direction
-        if (currentDirection) {
-          if(latestCurrent > 0.0){
+        if (currentDirection)
+        {
+          if (latestCurrent > 0.0)
+          {
             positive_adc_sum += adc_raw;
             positive_adc_count++;
           }
-        } else {
-          if(latestCurrent < 0.0){
+        }
+        else
+        {
+          if (latestCurrent < 0.0)
+          {
             negative_adc_sum += adc_raw;
             negative_adc_count++;
           }
@@ -328,7 +337,6 @@ void process_adc_data() {
     }
   }
 }
-
 
 void initWiFi()
 {
@@ -687,101 +695,118 @@ const unsigned long reconnectInterval = 10000; // 10s
 
 void loop()
 {
-if (WiFi.status() != WL_CONNECTED) {
-   unsigned long currentMillis = millis();
-   if (currentMillis - lastReconnectAttempt >= reconnectInterval) {
-     Serial.println("Reconnecting to WiFi...");
-     WiFi.disconnect();
-     wifiMulti.run();
-     lastReconnectAttempt = currentMillis;
-   }
- }
+  if (WiFi.status() != WL_CONNECTED)
+  {
+    unsigned long currentMillis = millis();
+    if (currentMillis - lastReconnectAttempt >= reconnectInterval)
+    {
+      Serial.println("Reconnecting to WiFi...");
+      WiFi.disconnect();
+      wifiMulti.run();
+      lastReconnectAttempt = currentMillis;
+    }
+  }
 
- if(peakPositiveVoltage == 0.0){
-   peakPositiveVoltage = FValue1.toFloat();
-   peakNegativeVoltage = FValue1.toFloat();
-   averagePositiveVoltage = FValue1.toFloat();
-   averageNegativeVoltage = FValue1.toFloat();
- }
+  if (peakPositiveVoltage == 0.0)
+  {
+    peakPositiveVoltage = FValue1.toFloat();
+    peakNegativeVoltage = FValue1.toFloat();
+    averagePositiveVoltage = FValue1.toFloat();
+    averageNegativeVoltage = FValue1.toFloat();
+  }
 
- ws.cleanupClients();
+  ws.cleanupClients();
 
- currentTime = micros();
- currentTimeMillis = millis();
+  currentTime = micros();
+  currentTimeMillis = millis();
 
- if (isRunning == false)
- {
-   rgbLedWrite(48, 0, 0, 0); // led off
-   digitalWrite(outputEnablePin, LOW); // Deactivate outputs
- }
+  if (isRunning == false)
+  {
+    rgbLedWrite(48, 0, 0, 0);           // led off
+    digitalWrite(outputEnablePin, LOW); // Deactivate outputs
+  }
 
- if (isRunning == true)
- {
-    process_adc_data(); // Process ADC data (this updates latestCurrent and latestRaw)
+  if (isRunning == true)
+  {
+    process_adc_data();                  // Process ADC data (this updates latestCurrent and latestRaw)
     rgbLedWrite(48, 128, 0, 0);          // Bright red to show outputs are active
     digitalWrite(outputEnablePin, HIGH); // Activate Outputs !Possible Danger! Should see PVDD on output!
-
 
     // Get the output voltage
     VoltControl_PWM = round((FValue1.toFloat()) / TargetVoltsConversionFactor);
     ledcWrite(VoltControl_PWM_Pin, VoltControl_PWM);
 
-    if (positive_adc_count >= MAX_SAMPLES) {
-      averagePositiveCurrent = ((positive_adc_sum/positive_adc_count) * SLOPE) + INTERCEPT;
+    if (positive_adc_count >= MAX_SAMPLES)
+    {
+      averagePositiveCurrent = ((positive_adc_sum / positive_adc_count) * SLOPE) + INTERCEPT;
       positive_adc_sum = 0;
       positive_adc_count = 0;
     }
-    if (negative_adc_count >= MAX_SAMPLES) {
-      averageNegativeCurrent = ((negative_adc_sum / negative_adc_count) * SLOPE)+ INTERCEPT;
-      if (fabs(averageNegativeCurrent) >= 1.1 * fabs(averagePositiveCurrent)) {
+    if (negative_adc_count >= MAX_SAMPLES)
+    {
+      averageNegativeCurrent = ((negative_adc_sum / negative_adc_count) * SLOPE) + INTERCEPT;
+      if (fabs(averageNegativeCurrent) >= 1.1 * fabs(averagePositiveCurrent))
+      {
         averageNegativeCurrent = -averagePositiveCurrent;
       }
       negative_adc_sum = 0;
       negative_adc_count = 0;
     }
 
-    if (outputDirection) {
-      if (latestCurrent > peakPositiveCurrent) {
+    if (outputDirection)
+    {
+      if (latestCurrent > peakPositiveCurrent)
+      {
         peakPositiveCurrent = latestCurrent;
       }
-    } else {
-      if (latestCurrent < peakNegativeCurrent) {
+    }
+    else
+    {
+      if (latestCurrent < peakNegativeCurrent)
+      {
         peakNegativeCurrent = latestCurrent;
         // Apply saturation fix for peak current as well
-        if (fabs(peakNegativeCurrent) >= 1.1 * fabs(peakPositiveCurrent)) {
+        if (fabs(peakNegativeCurrent) >= 1.1 * fabs(peakPositiveCurrent))
+        {
           peakNegativeCurrent = -peakPositiveCurrent;
         }
       }
     }
 
-    if (outputDirection == true) { // Currently in FORWARD direction
-      if (currentTime - reversestartTime >= ForwardTimeInt * 1000) {
+    if (outputDirection == true)
+    { // Currently in FORWARD direction
+      if (currentTime - reversestartTime >= ForwardTimeInt * 1000)
+      {
         reversestartTime = currentTime;
         outputDirection = false; // Switch to reverse
         digitalWrite(outputDirectionPin, outputDirection);
       }
-    } else { // Currently in REVERSE direction
-      if (currentTime - reversestartTime >= ReverseTimeInt * 1000) { 
+    }
+    else
+    { // Currently in REVERSE direction
+      if (currentTime - reversestartTime >= ReverseTimeInt * 1000)
+      {
         reversestartTime = currentTime;
         outputDirection = true; // Switch to forward
         digitalWrite(outputDirectionPin, outputDirection);
       }
     }
 
-    if(currentTimeMillis >= 60000 && !hasResetPeakCurrent)
+    if (currentTimeMillis >= 60000 && !hasResetPeakCurrent)
     {
       hasResetPeakCurrent = true;
       resetPeakValues();
       notifyClients(getValues());
     }
 
-    if (millis() - lastNotifyTime >= notifyInterval) {
-    lastNotifyTime = millis();
-    notifyClients(getValues());
-    Serial.print(">AveragePosCurrent:");
-    Serial.println(averagePositiveCurrent);
-    Serial.print(">AverageNegCurrent:");
-    Serial.println(averageNegativeCurrent);
+    if (millis() - lastNotifyTime >= notifyInterval)
+    {
+      lastNotifyTime = millis();
+      notifyClients(getValues());
+      // Serial.print(">AveragePosCurrent:");
+      // Serial.println(averagePositiveCurrent);
+      // Serial.print(">AverageNegCurrent:");
+      // Serial.println(averageNegativeCurrent);
     }
   }
 }
