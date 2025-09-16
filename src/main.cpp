@@ -219,8 +219,10 @@ unsigned long lastNotifyTime = 0;
 const unsigned long notifyInterval = 100;
 
 // ADC Constants
-const float INTERCEPT = -7.11166481117379f; // From calibration 9/12/25
-const float SLOPE = 0.00353825655865396f;   // From calibration 9/12/25
+const float INTERCEPT = -39.3900104981669f; // From calibration 7/5/25
+const float SLOPE = 0.0192397497221598f;    // From calibration 7/5/25
+// const float INTERCEPT = -7.11166481117379f; // From calibration 9/12/25
+// const float SLOPE = 0.00353825655865396f;   // From calibration 9/12/25
 
 // New ADC functions
 void setup_adc_calibration()
