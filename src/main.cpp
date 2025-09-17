@@ -36,6 +36,7 @@ Software To Do (TK):
 #include "esp_adc/adc_continuous.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
+#include <ESPmDNS.h>
 
 // TK get rid of hard coded security information before release!
 // TK use the ESP32 as a wifi access point local network with secure login credentials. User access control?
@@ -346,6 +347,7 @@ void initWiFi()
   WiFi.mode(WIFI_STA);
 
   // Add list of wifi networks
+  wifiMulti.addAP("rat bastard", "flyingcatbird2019");
   wifiMulti.addAP("ORT", "4orinonly");
   wifiMulti.addAP("ExcitonClean", "sunnycarrot023");
   wifiMulti.addAP("ekotestbox01", "myvoiceismypassword");
@@ -667,6 +669,13 @@ void setup()
 
   // Initialize WiFi and filesystem
   initWiFi();
+
+  if (MDNS.begin("orintechbox")) { // go to -> http://orintechbox.local
+      Serial.println("mDNS responder started");
+    } else {
+      Serial.println("Error setting up MDNS responder!");
+    }
+
   initFS();
 
   if (!loadSettings())
