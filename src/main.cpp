@@ -347,7 +347,6 @@ void initWiFi()
   WiFi.mode(WIFI_STA);
 
   // Add list of wifi networks
-  wifiMulti.addAP("rat bastard", "flyingcatbird2019");
   wifiMulti.addAP("ORT", "4orinonly");
   wifiMulti.addAP("ExcitonClean", "sunnycarrot023");
   wifiMulti.addAP("ekotestbox01", "myvoiceismypassword");
