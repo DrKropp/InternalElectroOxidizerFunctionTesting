@@ -26,7 +26,7 @@ Software To Do (TK):
 
 #include <Arduino.h>
 #include <WiFi.h>
-#include <WiFiMulti.h>
+#include <WiFiManager.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include "LittleFS.h"
@@ -39,30 +39,17 @@ Software To Do (TK):
 #include <ESPmDNS.h>
 
 // TK get rid of hard coded security information before release!
-// TK use the ESP32 as a wifi access point local network with secure login credentials. User access control?
+// WiFiManager now handles AP and captive portal automatically
+// Remove old AP Config code and use WiFiManager instead
 
-// Replace with your network credentials
-// const char *ssid = "ExcitonClean";
-// const char *password = "sunnycarrot023";
-const char *ssid = "ekotestbox01";
-const char *password = "myvoiceismypassword";
 const char *hostname = "OrinTechBox01";
+const char *ap_ssid = "OrinTech EEO Configuration";
 
-WiFiMulti wifiMulti;
+WiFiManager wifiManager;
 
 // Wifi reconnection helper variables
 unsigned long previousMillis = 0;
 unsigned long interval = 30000;
-
-// DNS server
-const byte DNS_PORT = 53;
-DNSServer dnsServer;
-
-// AP Config (Unused after switching to raspberry pi connect)
-// IPAddress apIP(192, 168, 4, 1);
-// IPAddress netMsk(255, 255, 255, 0);
-// char ap_ssid[32] = "OrinTechE0";
-// String ap_password = "EO-3PasswordField";
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80); // TK Change to port 443 for secure network
@@ -344,33 +331,23 @@ void process_adc_data()
 void initWiFi()
 {
   WiFi.setHostname(hostname);
-  WiFi.mode(WIFI_STA);
-
-  // Add list of wifi networks
-  wifiMulti.addAP("ORT", "4orinonly");
-  wifiMulti.addAP("ExcitonClean", "sunnycarrot023");
-  wifiMulti.addAP("ekotestbox01", "myvoiceismypassword");
-  wifiMulti.addAP("SandersWifi", "ISsignum12");
-  wifiMulti.addAP("ekotestbox02", "myvoiceismypassword");
-
-  // WiFi.begin(ssid, password);
-  Serial.println("Connecting to WiFi...");
-
-  if (wifiMulti.run() == WL_CONNECTED)
+  
+  // Configure WiFiManager
+  wifiManager.setConfigPortalTimeout(180); // 3 minute timeout for config portal
+  wifiManager.setConnectTimeout(20);       // 20 second timeout for connection attempts
+  
+  // Enable WiFi portal with custom SSID
+  if (!wifiManager.autoConnect(ap_ssid))
   {
-    Serial.println("");
-    Serial.println("WiFi connected");
-    Serial.println("IP address: ");
-    Serial.println(WiFi.localIP());
+    Serial.println("Failed to connect and/or hit timeout");
+    // Device will restart automatically after timeout
+  }
+  else
+  {
+    Serial.println("WiFi connected successfully");
   }
 
-  unsigned long startAttemptTime = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 20000)
-  { // 20s timeout
-    Serial.printf("WiFi Status: %d\n", WiFi.status());
-    delay(500);
-  }
-
+  // Print connection info
   if (WiFi.status() == WL_CONNECTED)
   {
     Serial.println("\nConnected!");
@@ -666,7 +643,7 @@ void setup()
 
   rgbLedWrite(RGBLedPin, 0, 0, 0);
 
-  // Initialize WiFi and filesystem
+  // Initialize WiFi with WiFiManager (captive portal support)
   initWiFi();
 
   if (MDNS.begin("orintechbox")) { // go to -> http://orintechbox.local
@@ -712,7 +689,7 @@ void loop()
     {
       Serial.println("Reconnecting to WiFi...");
       WiFi.disconnect();
-      wifiMulti.run();
+      wifiManager.autoConnect(ap_ssid);
       lastReconnectAttempt = currentMillis;
     }
   }
