@@ -42,7 +42,7 @@ Software To Do (TK):
 // WiFiManager now handles AP and captive portal automatically
 // Remove old AP Config code and use WiFiManager instead
 
-const char *hostname = "OrinTechBox01";
+const char *hostname = "OrinTechBox06";
 const char *ap_ssid = "OrinTech EEO Configuration";
 
 WiFiManager wifiManager;
