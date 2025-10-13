@@ -42,10 +42,13 @@ Software To Do (TK):
 // WiFiManager now handles AP and captive portal automatically
 // Remove old AP Config code and use WiFiManager instead
 
-const char *hostname = "OrinTechBox06";
-const char *ap_ssid = "OrinTech EEO Configuration";
+char hostname[64] = "OrinTechBox01";
+char deviceName[64] = "OrinTechBox01";
+char ap_ssid[64];
+char chip_id_hex[9];
 
 WiFiManager wifiManager;
+WiFiManagerParameter custom_device_name("devicename", "Device Name", "", 32);
 
 // Wifi reconnection helper variables
 unsigned long previousMillis = 0;
@@ -204,8 +207,7 @@ const float TargetVoltsConversionFactor = 0.0301686059427937; // Slope Value fro
 
 // temp
 unsigned long lastNotifyTime = 0;
-const unsigned long notifyInterval = 100;
-
+const unsigned long notifyInterval = 500; // Notify clients every 500ms, TK might be too fast for some clients
 // ADC Constants
 const float INTERCEPT = -39.3900104981669f; // From calibration 7/5/25
 const float SLOPE = 0.0192397497221598f;    // From calibration 7/5/25
@@ -336,6 +338,9 @@ void initWiFi()
   wifiManager.setConfigPortalTimeout(180); // 3 minute timeout for config portal
   wifiManager.setConnectTimeout(20);       // 20 second timeout for connection attempts
   
+  // Add custom parameter for device name
+  wifiManager.addParameter(&custom_device_name);
+  
   // Enable WiFi portal with custom SSID
   if (!wifiManager.autoConnect(ap_ssid))
   {
@@ -347,6 +352,17 @@ void initWiFi()
     Serial.println("WiFi connected successfully");
   }
 
+  // Retrieve custom device name from the captive portal
+  String deviceNameInput = custom_device_name.getValue();
+  if (deviceNameInput.length() > 0)
+  {
+    deviceNameInput.toCharArray(deviceName, sizeof(deviceName));
+    snprintf(hostname, sizeof(hostname), "%s", deviceName);
+    WiFi.setHostname(hostname);
+    Serial.print("Device Name set to: ");
+    Serial.println(deviceName);
+  }
+
   // Print connection info
   if (WiFi.status() == WL_CONNECTED)
   {
@@ -355,6 +371,8 @@ void initWiFi()
     Serial.println(WiFi.SSID());
     Serial.print("IP: ");
     Serial.println(WiFi.localIP());
+    Serial.print("Hostname: ");
+    Serial.println(hostname);
   }
   else
   {
@@ -611,6 +629,20 @@ void setup()
 {
   Serial.begin(460800);
   delay(100);
+
+  // Get the chip ID and create unique AP SSID and hostname
+  uint32_t chipId = ESP.getEfuseMac();
+  snprintf(chip_id_hex, sizeof(chip_id_hex), "%08X", (uint32_t)(chipId & 0xFFFFFFFF));
+  snprintf(ap_ssid, sizeof(ap_ssid), "OrinTech EEO %s", chip_id_hex);
+  snprintf(hostname, sizeof(hostname), "OrinTech-%s", chip_id_hex);
+  snprintf(deviceName, sizeof(deviceName), "OrinTech-%s", chip_id_hex);
+
+  Serial.print("Chip ID (Hex): ");
+  Serial.println(chip_id_hex);
+  Serial.print("AP SSID: ");
+  Serial.println(ap_ssid);
+  Serial.print("Default Hostname: ");
+  Serial.println(hostname);
 
   bool testAttach = ledcAttach(VoltControl_PWM_Pin, PWMFreq, outputBits);
   if (!testAttach)
