@@ -217,7 +217,7 @@ const float TargetVoltsConversionFactor = 0.0301686059427937; // Slope Value fro
 
 // temp
 unsigned long lastNotifyTime = 0;
-const unsigned long notifyInterval = 100;
+const unsigned long notifyInterval = 300; // Notify clients every 300ms, too much faster might be causing websocket issues
 
 // ADC Constants
 const float INTERCEPT = -39.3900104981669f; // From calibration 7/5/25
