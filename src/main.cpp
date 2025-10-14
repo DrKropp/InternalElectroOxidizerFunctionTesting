@@ -23,6 +23,9 @@ Software To Do (TK):
     b: Peak output current during first few milliseconds after changing voltage direction
   6: Implement PID control to automatically adjust PWM duty cycle to match output voltage set-points
 */
+#define CONFIG_ASYNC_TCP_QUEUE_SIZE 256
+#define SSE_MAX_QUEUED_MESSAGES 256
+#define WS_MAX_QUEUED_MESSAGES 256
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -37,6 +40,8 @@ Software To Do (TK):
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
 #include <ESPmDNS.h>
+
+
 
 // TK get rid of hard coded security information before release!
 // WiFiManager now handles AP and captive portal automatically
@@ -56,6 +61,7 @@ unsigned long interval = 30000;
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80); // TK Change to port 443 for secure network
+
 // Create a WebSocket object
 
 AsyncWebSocket ws("/ws");
@@ -627,8 +633,8 @@ String processor(const String &var)
 
 void setup()
 {
-  Serial.begin(460800);
-  delay(100);
+  Serial.begin(115200);
+  delay(500);
 
   // Get the chip ID and create unique AP SSID and hostname
   uint32_t chipId = ESP.getEfuseMac();
@@ -674,25 +680,29 @@ void setup()
   // delay(100);
 
   rgbLedWrite(RGBLedPin, 0, 0, 0);
-
-  // Initialize WiFi with WiFiManager (captive portal support)
-  initWiFi();
-
-  if (MDNS.begin("orintechbox")) { // go to -> http://orintechbox.local
-      Serial.println("mDNS responder started");
-    } else {
-      Serial.println("Error setting up MDNS responder!");
-    }
-
-  initFS();
+  
 
   if (!loadSettings())
   {
     Serial.println("Failed to load settings. Using defaults.");
     setDefaultSettings();
   }
+  // Initialize WiFi with WiFiManager (captive portal support)
+  initWiFi();
+
+  if (MDNS.begin(deviceName)) { // go to -> http://orintechbox.local
+      Serial.print("mDNS responder started");
+      Serial.print(" with hostname: ");
+      Serial.println("http://" + String(deviceName) + ".local");
+    } else {
+      Serial.println("Error setting up MDNS responder!");
+    }
+
+
 
   initWebSocket();
+
+  initFS();
 
   server.onNotFound([](AsyncWebServerRequest *request)
                     { request->send(LittleFS, "/index.html", "text/html"); });
