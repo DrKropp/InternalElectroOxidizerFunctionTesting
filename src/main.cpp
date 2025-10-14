@@ -24,6 +24,10 @@ Software To Do (TK):
   6: Implement PID control to automatically adjust PWM duty cycle to match output voltage set-points
 */
 
+#define CONFIG_ASYNC_TCP_QUEUE_SIZE 256
+#define SSE_MAX_QUEUED_MESSAGES 256
+#define WS_MAX_QUEUED_MESSAGES 256
+
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiMulti.h>
@@ -632,7 +636,7 @@ String processor(const String &var)
 
 void setup()
 {
-  Serial.begin(460800);
+  Serial.begin(115200);
   delay(100);
 
   bool testAttach = ledcAttach(VoltControl_PWM_Pin, PWMFreq, outputBits);
