@@ -211,7 +211,7 @@ bool isIp(String str);
 void setup()
 {
   Serial.begin(115200);
-  delay(100);
+  //delay(100); // Wait for serial to initialize if needed
 
   // Generate unique identifiers based on chip ID
   uint32_t chipId = ESP.getEfuseMac();
@@ -221,7 +221,7 @@ void setup()
   snprintf(deviceName, sizeof(deviceName), "OrinTech-%s", chip_id_hex);
 
   Serial.println("\n\n╔════════════════════════════════════════════╗");
-  Serial.println("║  OrinTech EEO Device Starting             ║");
+  Serial.println("║  OrinTech EEO Device Starting              ║");
   Serial.println("╚════════════════════════════════════════════╝");
   Serial.printf("Chip ID: %s\n", chip_id_hex);
   Serial.printf("AP SSID: %s\n", ap_ssid);
@@ -278,7 +278,7 @@ void setup()
   resetPeakValues();
 
   Serial.println("\n╔════════════════════════════════════════════╗");
-  Serial.println("║  Setup Complete - Device Ready            ║");
+  Serial.println("║  Setup Complete - Device Ready             ║");
   Serial.println("╚════════════════════════════════════════════╝\n");
 }
 
