@@ -29,6 +29,20 @@ Required Platform:
 // ============================================================================
 // INCLUDES
 // ============================================================================
+//AsyncTCP configuration for stability with multiple clients
+#define CONFIG_ASYNC_TCP_QUEUE_SIZE 256
+#define SSE_MAX_QUEUED_MESSAGES 256
+#define WS_MAX_QUEUED_MESSAGES 256
+#include <AsyncTCP.h>
+
+// Multi-reset detector settings for WiFi credential reset
+#define ESP_MRD_USE_LITTLEFS true
+#define MULTIRESETDETECTOR_DEBUG true
+#define MRD_TIMEOUT 5        // Seconds between resets to trigger multi-reset
+#define MRD_TIMES 3          // Number of resets required
+#define MRD_ADDRESS 0        // Storage address in LittleFS
+#include <ESP_MultiResetDetector.h>
+
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiManager.h>
@@ -42,25 +56,10 @@ Required Platform:
 #include "esp_adc/adc_cali_scheme.h"
 #include <ESPmDNS.h>
 
-//AsyncTCP configuration for stability with multiple clients
-#define CONFIG_ASYNC_TCP_QUEUE_SIZE 256
-#define SSE_MAX_QUEUED_MESSAGES 256
-#define WS_MAX_QUEUED_MESSAGES 256
-#include <AsyncTCP.h>
-
-// Multi-reset detector for WiFi credential reset
-#define ESP_MRD_USE_LITTLEFS true
-#define MULTIRESETDETECTOR_DEBUG true
-#include <ESP_MultiResetDetector.h>
 
 // ============================================================================
 // CONFIGURATION CONSTANTS
 // ============================================================================
-
-// Multi-Reset Detector Settings
-#define MRD_TIMEOUT 5        // Seconds between resets to trigger multi-reset
-#define MRD_TIMES 3          // Number of resets required
-#define MRD_ADDRESS 0        // Storage address in LittleFS
 
 // GPIO Pin Definitions - DRV8706H-Q1 H-Bridge
 const uint8_t VoltControl_PWM_Pin = 8;   // PWM output to control 24V supply voltage
