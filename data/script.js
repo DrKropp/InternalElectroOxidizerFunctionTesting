@@ -62,15 +62,32 @@ function onMessage(event) {
     console.log(event.data);
     var myObj = JSON.parse(event.data);
     var keys = Object.keys(myObj);
-    var state;
-    if (event.data == "1"){
-        state = "ON";
-        //document.querySelector('.top-card .state span').color = "green";
-      }
-      else{
-        state = "OFF";
-        //document.querySelector('.top-card .state span').color = "red";
-      }
+
+    // CRITICAL FIX: Handle isRunning state updates from server
+    if (myObj.hasOwnProperty('isRunning')) {
+        const serverIsRunning = myObj.isRunning;
+        
+        // Only update UI if state differs from current local state
+        if (serverIsRunning !== isArmed) {
+            isArmed = serverIsRunning;
+            
+            // Update UI to match server state
+            if (isArmed) {
+                document.getElementById('state').innerHTML = "ON";
+                document.querySelector('#state-card').style.backgroundColor = "green";
+                document.getElementById('on-button').classList.add('active');
+                document.getElementById('off-button').classList.remove('active');
+            } else {
+                document.getElementById('state').innerHTML = "OFF";
+                document.querySelector('#state-card').style.backgroundColor = "red";
+                document.getElementById('on-button').classList.remove('active');
+                document.getElementById('off-button').classList.add('active');
+            }
+            
+            console.log('Device state synchronized: ' + (isArmed ? 'ON' : 'OFF'));
+        }
+    }
+    
     for (var i = 0; i < keys.length; i++){
         var key = keys[i];
         if(document.getElementById(key) === null) {
@@ -97,22 +114,19 @@ function initButton() {
 
 function toggleOff() {
     if(!isArmed) { return; }
-    isArmed = false;
-    document.getElementById('state').innerHTML = "OFF";
-    document.querySelector('.bottom-card').style.backgroundColor = "red";
-    document.getElementById('on-button').classList.remove('active');
-    document.getElementById('off-button').classList.add('active');
+    
+    // Send toggle command - don't update UI yet, wait for server confirmation
     websocket.send('toggle');
+    console.log('Toggle OFF command sent');
 }
 
 function toggleOn() {
     if(isArmed) { return; }
-    isArmed = true;
-    document.getElementById('state').innerHTML = "ON";
-    document.querySelector('.bottom-card').style.backgroundColor = "green";
-    document.getElementById('on-button').classList.add('active');
-    document.getElementById('off-button').classList.remove('active');
+    
+    // Send toggle command - don't update UI yet, wait for server confirmation
     websocket.send('toggle');
+    console.log('Toggle ON command sent');
+}
 }
   function toggle(){
     //websocket.send('toggle');
@@ -297,3 +311,4 @@ function toggleTiming(element) {
         updateSlider();
     }
 }
+
