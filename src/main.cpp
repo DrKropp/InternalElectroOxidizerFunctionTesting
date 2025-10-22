@@ -683,7 +683,7 @@ bool loadSettings()
 String getValues()
 {
   JsonDocument controlValues;
-
+  controlValues["isRunning"] = isRunning; //Added to update all active clients of current device state
   controlValues["FValue1"] = String(FValue1);
   controlValues["FValue2"] = String(FValue2);
   controlValues["RValue2"] = String(RValue2);
