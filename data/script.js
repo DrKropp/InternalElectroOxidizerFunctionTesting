@@ -11,7 +11,7 @@ var isS = false; // is in seconds mode - false = no / true = yes
 
 window.addEventListener('load', onload);
 
-function onload(event) {
+function onload() {
     initWebSocket();
     initButton();
 
@@ -27,25 +27,38 @@ function getValues(){
     websocket.send("getValues");
 }
 
+var pollingInterval; // Store interval ID for cleanup
+
 function initWebSocket() {
     console.log('Trying to open a WebSocket connection…');
     websocket = new WebSocket(gateway);
     websocket.onopen = onOpen;
     websocket.onclose = onClose;
     websocket.onmessage = onMessage;
-    setInterval(() =>  {
-        if(websocket.readyState === websocket.OPEN){
-            websocket.send("getValues");
-        }
-    }, 5000); // requests data every 5 seconds
+    websocket.onerror = function(error) {
+        console.log('WebSocket error:', error);
+    };
+
+    // Clear any existing polling interval to prevent duplicates
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+    }
+
+    // Set up new polling interval - disabled since server pushes updates every 500ms
+    // Client no longer needs to poll, server automatically sends updates
+    // pollingInterval = setInterval(() => {
+    //     if(websocket.readyState === WebSocket.OPEN) {
+    //         websocket.send("getValues");
+    //     }
+    // }, 5000); // requests data every 5 seconds
 }
 
-function onOpen(event) {
+function onOpen() {
     console.log('Connection opened');
     getValues();
 }
 
-function onClose(event) {
+function onClose() {
     console.log('Connection closed');
     setTimeout(initWebSocket, 2000);
 }
@@ -114,7 +127,13 @@ function initButton() {
 
 function toggleOff() {
     if(!isArmed) { return; }
-    
+
+    // Ensure WebSocket is open before sending command
+    if(websocket.readyState !== WebSocket.OPEN) {
+        console.error('WebSocket not connected');
+        return;
+    }
+
     // Send toggle command - don't update UI yet, wait for server confirmation
     websocket.send('toggle');
     console.log('Toggle OFF command sent');
@@ -122,56 +141,73 @@ function toggleOff() {
 
 function toggleOn() {
     if(isArmed) { return; }
-    
+
+    // Ensure WebSocket is open before sending command
+    if(websocket.readyState !== WebSocket.OPEN) {
+        console.error('WebSocket not connected');
+        return;
+    }
+
     // Send toggle command - don't update UI yet, wait for server confirmation
     websocket.send('toggle');
     console.log('Toggle ON command sent');
 }
-}
-  function toggle(){
-    //websocket.send('toggle');
-    if(isArmed){
-        isArmed = false;
-        document.getElementById('state').innerHTML = "OFF";
-        document.querySelector('.bottom-card').style.backgroundColor = "red";
-    } else {
-        isArmed = true;
-        document.getElementById('state').innerHTML = "ON";
-        document.querySelector('.bottom-card').style.backgroundColor = "green";
-    }
-    websocket.send('toggle');
-  }
 
 
 function handleUpdate() {
-    if(isArmed) {
-        alert("Cannot change values while device output is on!");
+    if (!selectedCard) return;
+
+    // Ensure WebSocket is open before sending command
+    if(websocket.readyState !== WebSocket.OPEN) {
+        console.error('WebSocket not connected');
         return;
     }
-    if (!selectedCard || isArmed) return;
-    
+
+    const wasRunning = isArmed; // Remember if output was on
+
+    // If output is running, turn it off first
+    if (wasRunning) {
+        console.log('Turning off output before update...');
+        websocket.send('toggle');
+        // Give it a moment to turn off before updating
+        setTimeout(() => performUpdate(wasRunning), 100);
+    } else {
+        performUpdate(false);
+    }
+}
+
+function performUpdate(restartAfter) {
     const slider = document.getElementById("slider");
     const newValue = parseFloat(slider.value);
     const oldValueSpan = document.querySelector('.updated-value-container .tile:first-child span');
-    
+
     // Convert back to ms for card2 if in seconds mode
     let valueToSend = newValue;
     let displayValue = newValue;
-    
+
     if (selectedCardId === '2' && isS) {
         valueToSend = Math.round(newValue * 1000);  // convert to ms
         displayValue = newValue;                    // keep display in seconds
     }
 
     // update the display
-    document.getElementById(selectedCardState + "Value" + selectedCardId).textContent = 
+    document.getElementById(selectedCardState + "Value" + selectedCardId).textContent =
         selectedCardId === '2' && isS ? displayValue.toFixed(2) : displayValue;
 
     // send value to websocket server (always in ms for timing)
     websocket.send(selectedCardId + selectedCardState + valueToSend.toString());
-    
+
     oldValueSpan.textContent = displayValue.toFixed(2);
-    selectCard(selectedCard);
+
+    console.log('Value updated');
+
+    // If output was running before, restart it after a brief delay
+    if (restartAfter) {
+        setTimeout(() => {
+            console.log('Restarting output after update...');
+            websocket.send('toggle');
+        }, 200);
+    }
 }
 
 var selectedCard; // the acutal html element for the selected card
@@ -179,10 +215,6 @@ var selectedCardId; // the id of the selected card: 1-4
 var selectedCardState = 'F'; // 'F' = Forward, 'R' = Reverse - 'F' is default
 
 function selectCard(element){
-    if(isArmed){
-        alert("Cannot change values while device output is on!");
-        return;
-    }
     if(selectedCard == element){
         if(selectedCard == document.getElementById('card1')) return;
         document.getElementById(selectedCardState+"Value"+selectedCardId).classList.remove("selected");
@@ -225,7 +257,7 @@ function selectCard(element){
 }
 
 function updateSlider() {
-    if(selectedCard == null || isArmed) return;
+    if(selectedCard == null) return;
     
     const valueElement = document.getElementById(selectedCardState + "Value" + selectedCardId);
     let inputValue = parseFloat(valueElement.textContent);
@@ -261,13 +293,13 @@ function updateSlider() {
 }
 
 function updateValue() {
-    if(selectedCard == null || isArmed) return;
+    if(selectedCard == null) return;
     const inputValue = parseFloat(document.getElementById("slider").value);
     document.getElementById("new").value = inputValue;
 }
 
 function syncSlider(){
-    if(selectedCard == null || isArmed) return;
+    if(selectedCard == null) return;
     const slider = document.getElementById("slider");
     const inputValue = parseFloat(document.getElementById("new").value);
     slider.value = inputValue;
@@ -310,5 +342,24 @@ function toggleTiming(element) {
     if (selectedCard && selectedCardId === '2') {
         updateSlider();
     }
+}
+
+function downloadLogs() {
+    console.log('Downloading logs...');
+    const downloadButton = document.getElementById('download-logs-button');
+    const originalText = downloadButton.innerHTML;
+
+    // Show loading state
+    downloadButton.innerHTML = '<span class="loading-spinner"></span> Preparing download...';
+    downloadButton.disabled = true;
+
+    // Trigger download
+    window.location.href = '/downloadLogs';
+
+    // Reset button after delay
+    setTimeout(() => {
+        downloadButton.innerHTML = originalText;
+        downloadButton.disabled = false;
+    }, 3000);
 }
 

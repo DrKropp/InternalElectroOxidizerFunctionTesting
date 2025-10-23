@@ -1,14 +1,15 @@
 /*
-***Electrooxidizer Version 2 Firmware Alpha 0.02***
+***Electrooxidizer Version 2 Firmware Alpha 0.03***
 Author: Ramsey Kropp
-Last Updated: 2025
+Last Updated: 2025-10-23
 
-Firmware for ESP32-S3 to control electrode voltage direction and timing 
+Firmware for ESP32-S3 to control electrode voltage direction and timing
 during electrooxidative treatment of groundwater.
 
 Features:
 - WiFi provisioning with captive portal (WiFiManager)
-- Multi-reset detection for WiFi credential reset
+- Multi-network support (remembers up to 5 networks)
+- Multi-reset detection for WiFi credential reset (power cycle or button)
 - Web-based control interface with WebSocket communication
 - Continuous ADC sampling for current monitoring
 - H-Bridge control for voltage polarity switching
@@ -29,7 +30,8 @@ Required Platform:
 // ============================================================================
 // INCLUDES
 // ============================================================================
-//AsyncTCP configuration for stability with multiple clients
+
+// AsyncTCP configuration for stability with multiple clients
 #define CONFIG_ASYNC_TCP_QUEUE_SIZE 256
 #define SSE_MAX_QUEUED_MESSAGES 256
 #define WS_MAX_QUEUED_MESSAGES 256
@@ -56,49 +58,19 @@ Required Platform:
 #include "esp_adc/adc_cali_scheme.h"
 #include <ESPmDNS.h>
 
+// Project-specific headers
+#include "config.h"
+#include "globals.h"
+#include "multi_network.h"
+#include "button_handler.h"
+#include "portal_css.h"
+#include "logging.h"
 
 // ============================================================================
-// CONFIGURATION CONSTANTS
+// GLOBAL VARIABLE DEFINITIONS
 // ============================================================================
 
-// GPIO Pin Definitions - DRV8706H-Q1 H-Bridge
-const uint8_t VoltControl_PWM_Pin = 8;   // PWM output to control 24V supply voltage
-const uint8_t outputEnablePin = 4;       // H-Bridge enable (In1/EN)
-const uint8_t nHiZ1Pin = 5;              // Not used in mode 2
-const uint8_t outputDirectionPin = 6;    // H-Bridge direction control (In2/PH)
-const uint8_t nHiZ2Pin = 7;              // Not used in mode 2
-const uint8_t nSleepPin = 15;            // Sleep mode control (HIGH=wake, LOW=sleep)
-const uint8_t DRVOffPin = 16;            // Disable DRV output (HIGH=disable)
-const uint8_t nFaultPin = 17;            // Fault indicator (pulled LOW on fault)
-
-// GPIO Pin Definitions - Other
-const uint8_t testButton = 1;            // Test button (active LOW)
-const uint8_t RGBLedPin = 48;            // Built-in RGB LED
-const int ADC_PIN = 2;                   // Current sense ADC input
-
-// PWM Configuration
-const uint8_t outputBits = 10;           // 10-bit PWM resolution (0-1023)
-const uint16_t PWMFreq = 25000;          // 25 kHz PWM frequency
-const float TargetVoltsConversionFactor = 0.0301686059427937; // Calibrated 16-Jan-2025
-
-// ADC Configuration
-const int SAMPLE_RATE = 20000;           // 20 kHz sampling rate
-const unsigned long WINDOW_US = 40000;   // 40ms sampling window
-const int MAX_SAMPLES_NEW = 1000;        // Max samples per window
-const int BUFFER_SIZE = MAX_SAMPLES_NEW * 4;
-const uint8_t MAX_SAMPLES = 100;         // Samples for averaging
-
-// ADC Calibration Constants (from calibration 7/5/25)
-const float ADC_INTERCEPT = -39.3900104981669f;
-const float ADC_SLOPE = 0.0192397497221598f;
-
-// Timing Constants
-const unsigned long notifyInterval = 100;        // WebSocket update interval (ms)
-const unsigned long reconnectInterval = 10000;   // WiFi reconnect interval (ms)
-
-// ============================================================================
-// GLOBAL OBJECTS
-// ============================================================================
+// Global Objects
 WiFiManager wifiManager;
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
@@ -110,9 +82,7 @@ adc_continuous_handle_t adc_handle = NULL;
 adc_cali_handle_t adc_cali_handle = NULL;
 bool adc_calibrated = false;
 
-// ============================================================================
-// GLOBAL VARIABLES - Configuration
-// ============================================================================
+// Configuration Variables
 char hostname[64] = "OrinTechBox01";
 char deviceName[64] = "OrinTechBox01";
 char ap_ssid[64];
@@ -125,9 +95,7 @@ String RValue2;          // Reverse polarity time (ms)
 uint16_t ForwardTimeInt; // Forward time in milliseconds
 uint16_t ReverseTimeInt; // Reverse time in milliseconds
 
-// ============================================================================
-// GLOBAL VARIABLES - Runtime State
-// ============================================================================
+// Runtime State Variables
 bool isRunning = true;
 bool outputDirection = false;  // false=reverse, true=forward
 
@@ -153,6 +121,7 @@ uint32_t negative_adc_count = 0;
 uint32_t reversestartTime = 0;
 unsigned long lastNotifyTime = 0;
 unsigned long lastReconnectAttempt = 0;
+unsigned long lastLogTime = 0;
 
 // Peak Reset Management
 bool hasResetPeakCurrent = false;
@@ -181,6 +150,8 @@ void setDefaultSettings();
 bool loadSettings();
 bool saveSettings();
 bool saveDeviceName();
+void backupWiFiCredentials();
+void restoreWiFiCredentials();
 
 // Data Functions
 String getValues();
@@ -188,7 +159,7 @@ void resetPeakValues();
 
 // WebSocket Handlers
 void handleWebSocketMessage(void *arg, uint8_t *data, size_t len);
-void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, 
+void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
              AwsEventType type, void *arg, uint8_t *data, size_t len);
 void notifyClients(String values);
 void notifyClients();
@@ -204,13 +175,12 @@ String toStringIp(IPAddress ip);
 bool isIp(String str);
 
 // ============================================================================
-// SETUP FUNCTIONS
+// SETUP FUNCTION
 // ============================================================================
 
 void setup()
 {
   Serial.begin(115200);
-  //delay(100); // Wait for serial to initialize if needed
 
   // Generate unique identifiers based on chip ID
   uint32_t chipId = ESP.getEfuseMac();
@@ -233,10 +203,17 @@ void setup()
   // Initialize filesystem (required before MRD and settings)
   initFS();
 
+  // Initialize multi-network storage
+  initMultiNetworkStorage();
+  loadSavedNetworks();
+
+  // Initialize button multi-reset detection
+  initButtonHandler();
+
   // Initialize multi-reset detector
   mrd = new MultiResetDetector(MRD_TIMEOUT, MRD_ADDRESS);
   Serial.println("Multi-Reset Detector: Active");
-  Serial.println("Info: Power cycle 3x within 5s to reset WiFi\n");
+  Serial.println("Info: Power cycle 3x within 5s OR press button 3x within 5s to reset WiFi\n");
 
   // Load saved settings
   if (!loadSettings())
@@ -258,17 +235,39 @@ void setup()
     Serial.println("Error: mDNS failed to start");
   }
 
+  // Initialize logging system
+  initLogging();
+
   // Initialize web server and WebSocket
   initWebSocket();
-  
+
   server.onNotFound([](AsyncWebServerRequest *request) {
     request->send(LittleFS, "/index.html", "text/html");
   });
-  
+
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
     request->send(LittleFS, "/index.html", "text/html");
   });
-  
+
+  // Download logs endpoint
+  server.on("/downloadLogs", HTTP_GET, [](AsyncWebServerRequest *request) {
+    const char* archivePath = "/logs_archive.txt";
+
+    if (createLogArchive(archivePath)) {
+      request->send(LittleFS, archivePath, "text/plain", true, nullptr);
+      // Note: File cleanup happens on next download to ensure current download completes
+    } else {
+      request->send(500, "text/plain", "Failed to create log archive");
+    }
+  });
+
+  // Get log info endpoint (for debugging)
+  server.on("/logInfo", HTTP_GET, [](AsyncWebServerRequest *request) {
+    String info = "Available logs: " + listLogFiles() + "\n";
+    info += "Total size: " + String(getLogsTotalSize()) + " bytes";
+    request->send(200, "text/plain", info);
+  });
+
   server.serveStatic("/", LittleFS, "/");
   server.begin();
 
@@ -280,6 +279,10 @@ void setup()
   Serial.println("║  Setup Complete - Device Ready             ║");
   Serial.println("╚════════════════════════════════════════════╝\n");
 }
+
+// ============================================================================
+// SETUP FUNCTIONS
+// ============================================================================
 
 void initHardware()
 {
@@ -306,7 +309,7 @@ void initHardware()
   // Wake up DRV8706
   digitalWrite(nSleepPin, HIGH);
   Serial.println("DRV8706: Waking up");
-  
+
   digitalWrite(DRVOffPin, LOW);
   Serial.println("DRV8706: Ready (outputs disabled)");
 
@@ -343,6 +346,8 @@ void initWiFi()
   WiFi.setHostname(hostname);
 
   // Check for multi-reset condition
+  bool skipPortal = false;
+
   if (mrd->detectMultiReset())
   {
     Serial.println("\n*** MULTI-RESET DETECTED ***");
@@ -350,6 +355,14 @@ void initWiFi()
 
     // Clear stored credentials
     wifiManager.resetSettings();
+
+    // Clear all saved networks
+    if (LittleFS.exists("/networks.json"))
+    {
+      LittleFS.remove("/networks.json");
+      Serial.println("All saved networks: Cleared");
+    }
+    initMultiNetworkStorage();
 
     // Clear device name
     if (LittleFS.exists("/devicename.json"))
@@ -371,43 +384,70 @@ void initWiFi()
   else
   {
     Serial.println("No multi-reset detected");
+
+    // Try to connect to saved networks first
+    Serial.print(listSavedNetworks());
+
+    if (connectToSavedNetworks())
+    {
+      // Successfully connected to a saved network
+      skipPortal = true;
+      goto connection_success;
+    }
+
+    Serial.println("No saved networks available or all failed");
+    Serial.println("Starting configuration portal...");
   }
 
-  // Configure WiFiManager
-  wifiManager.setConfigPortalTimeout(180);  // 3 minute timeout
-  wifiManager.setConnectTimeout(20);        // 20 second connection timeout
-  wifiManager.addParameter(&custom_device_name);
-
-  // Start WiFi connection or config portal
-  if (!wifiManager.autoConnect(ap_ssid))
+  // Configure WiFiManager with custom styling
   {
-    Serial.println("Error: WiFi connection failed or timed out");
+    wifiManager.setConfigPortalTimeout(180);  // 3 minute timeout
+    wifiManager.setConnectTimeout(20);        // 20 second connection timeout
+    wifiManager.setCustomHeadElement(PORTAL_CSS);
+    wifiManager.setTitle("OrinTech Device WiFi Configuration");
+    wifiManager.addParameter(&custom_device_name);
+
+    // Start WiFi connection or config portal
+    if (!wifiManager.autoConnect(ap_ssid))
+    {
+      Serial.println("Error: WiFi connection failed or timed out");
+    }
+    else
+    {
+      Serial.println("WiFi: Connected successfully via captive portal");
+
+      // Add the newly configured network to our multi-network storage
+      String newSSID = WiFi.SSID();
+      String newPassword = WiFi.psk();
+
+      if (newSSID.length() > 0)
+      {
+        addOrUpdateNetwork(newSSID.c_str(), newPassword.c_str());
+      }
+    }
+
+    // Process custom device name from captive portal
+    String deviceNameInput = custom_device_name.getValue();
+    if (deviceNameInput.length() > 0)
+    {
+      deviceNameInput.toCharArray(deviceName, sizeof(deviceName));
+
+      // Create hostname-safe version
+      String hostnameStr = deviceNameInput;
+      hostnameStr.replace(" ", "-");
+      hostnameStr.replace("_", "-");
+      hostnameStr.toLowerCase();
+      hostnameStr.toCharArray(hostname, sizeof(hostname));
+
+      WiFi.setHostname(hostname);
+      Serial.printf("Device Name: %s\n", deviceName);
+      Serial.printf("Hostname: %s\n", hostname);
+
+      saveDeviceName();
+    }
   }
-  else
-  {
-    Serial.println("WiFi: Connected successfully");
-  }
 
-  // Process custom device name from captive portal
-  String deviceNameInput = custom_device_name.getValue();
-  if (deviceNameInput.length() > 0)
-  {
-    deviceNameInput.toCharArray(deviceName, sizeof(deviceName));
-
-    // Create hostname-safe version
-    String hostnameStr = deviceNameInput;
-    hostnameStr.replace(" ", "-");
-    hostnameStr.replace("_", "-");
-    hostnameStr.toLowerCase();
-    hostnameStr.toCharArray(hostname, sizeof(hostname));
-
-    WiFi.setHostname(hostname);
-    Serial.printf("Device Name: %s\n", deviceName);
-    Serial.printf("Hostname: %s\n", hostname);
-
-    saveDeviceName();
-  }
-
+connection_success:
   // Print connection info
   if (WiFi.status() == WL_CONNECTED)
   {
@@ -417,6 +457,9 @@ void initWiFi()
     Serial.printf("Hostname: %s\n", hostname);
     Serial.printf("Access at: http://%s.local\n", hostname);
     Serial.println("----------------------------\n");
+
+    // Backup current WiFi credentials for future reference
+    backupWiFiCredentials();
   }
   else
   {
@@ -425,6 +468,9 @@ void initWiFi()
     Serial.println("- Incorrect SSID/password");
     Serial.println("- Network not in 2.4GHz mode");
     Serial.println("- Weak signal strength");
+
+    // Check if we have backed up credentials
+    restoreWiFiCredentials();
     Serial.println("******************************\n");
   }
 }
@@ -521,7 +567,7 @@ void process_adc_data()
       if (p[i].type2.channel == ADC_CHANNEL_1 && p[i].type2.unit == ADC_UNIT_1)
       {
         uint32_t adc_raw = p[i].type2.data;
-        
+
         latestRaw = adc_raw;
         latestCurrent = (adc_raw * ADC_SLOPE) + ADC_INTERCEPT;
 
@@ -590,13 +636,69 @@ bool saveDeviceName()
 
   bool success = serializeJson(doc, file);
   file.close();
-  
+
   if (success)
   {
     Serial.println("Device name: Saved");
   }
-  
+
   return success;
+}
+
+void backupWiFiCredentials()
+{
+  // Only backup if WiFi is currently connected
+  if (WiFi.status() != WL_CONNECTED)
+  {
+    return;
+  }
+
+  JsonDocument doc;
+  doc["ssid"] = WiFi.SSID();
+  doc["timestamp"] = millis();
+
+  File file = LittleFS.open("/wifi_backup.json", "w");
+  if (!file)
+  {
+    Serial.println("Warning: Failed to backup WiFi credentials");
+    return;
+  }
+
+  if (serializeJson(doc, file))
+  {
+    Serial.printf("WiFi credentials backed up: %s\n", WiFi.SSID().c_str());
+  }
+
+  file.close();
+}
+
+void restoreWiFiCredentials()
+{
+  if (!LittleFS.exists("/wifi_backup.json"))
+  {
+    Serial.println("No WiFi backup found");
+    return;
+  }
+
+  File file = LittleFS.open("/wifi_backup.json", "r");
+  if (!file)
+  {
+    Serial.println("Warning: Failed to read WiFi backup");
+    return;
+  }
+
+  JsonDocument doc;
+  if (deserializeJson(doc, file) == DeserializationError::Ok)
+  {
+    String backupSSID = doc["ssid"] | "";
+    if (backupSSID.length() > 0)
+    {
+      Serial.printf("Previous network found: %s\n", backupSSID.c_str());
+      Serial.println("Note: Old credentials preserved in backup");
+    }
+  }
+
+  file.close();
 }
 
 bool loadSettings()
@@ -683,7 +785,7 @@ bool loadSettings()
 String getValues()
 {
   JsonDocument controlValues;
-  controlValues["isRunning"] = isRunning; //Added to update all active clients of current device state
+  controlValues["isRunning"] = isRunning;
   controlValues["FValue1"] = String(FValue1);
   controlValues["FValue2"] = String(FValue2);
   controlValues["RValue2"] = String(RValue2);
@@ -786,15 +888,15 @@ void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
       Serial.printf("WebSocket: Client #%u connected from %s\n",
                     client->id(), client->remoteIP().toString().c_str());
       break;
-    
+
     case WS_EVT_DISCONNECT:
       Serial.printf("WebSocket: Client #%u disconnected\n", client->id());
       break;
-    
+
     case WS_EVT_DATA:
       handleWebSocketMessage(arg, data, len);
       break;
-    
+
     case WS_EVT_PONG:
     case WS_EVT_ERROR:
       break;
@@ -803,12 +905,48 @@ void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
 
 void notifyClients(String values)
 {
-  ws.textAll(values);
+  // Check if any clients are connected before sending
+  if (ws.count() == 0) return;
+
+  // Send to each client individually with queue check
+  for (size_t i = 0; i < ws.count(); i++)
+  {
+    AsyncWebSocketClient *client = ws.client(i);
+    if (client && client->status() == WS_CONNECTED)
+    {
+      // Check if client queue has room (prevent overflow)
+      if (client->queueIsFull())
+      {
+        Serial.printf("Client #%u queue full, skipping update\n", client->id());
+        continue;
+      }
+      client->text(values);
+    }
+  }
 }
 
 void notifyClients()
 {
-  ws.textAll(String(isRunning));
+  // Check if any clients are connected before sending
+  if (ws.count() == 0) return;
+
+  String message = String(isRunning);
+
+  // Send to each client individually with queue check
+  for (size_t i = 0; i < ws.count(); i++)
+  {
+    AsyncWebSocketClient *client = ws.client(i);
+    if (client && client->status() == WS_CONNECTED)
+    {
+      // Check if client queue has room (prevent overflow)
+      if (client->queueIsFull())
+      {
+        Serial.printf("Client #%u queue full, skipping update\n", client->id());
+        continue;
+      }
+      client->text(message);
+    }
+  }
 }
 
 // ============================================================================
@@ -860,13 +998,13 @@ void handleMeasurements()
   if (negative_adc_count >= MAX_SAMPLES)
   {
     averageNegativeCurrent = ((negative_adc_sum / negative_adc_count) * ADC_SLOPE) + ADC_INTERCEPT;
-    
+
     // Apply saturation fix (clamp if significantly higher than positive)
     if (fabs(averageNegativeCurrent) >= 1.1 * fabs(averagePositiveCurrent))
     {
       averageNegativeCurrent = -averagePositiveCurrent;
     }
-    
+
     negative_adc_sum = 0;
     negative_adc_count = 0;
   }
@@ -884,7 +1022,7 @@ void handleMeasurements()
     if (latestCurrent < peakNegativeCurrent)
     {
       peakNegativeCurrent = latestCurrent;
-      
+
       // Apply saturation fix to peak as well
       if (fabs(peakNegativeCurrent) >= 1.1 * fabs(peakPositiveCurrent))
       {
@@ -934,16 +1072,42 @@ void loop()
   // Update multi-reset detector (must be called every loop)
   mrd->loop();
 
-  // Handle WiFi reconnection
+  // Check for button-based multi-reset (3 presses within 5 seconds)
+  checkButtonMultiReset();
+
+  // Handle WiFi reconnection with multi-network support
   if (WiFi.status() != WL_CONNECTED)
   {
     unsigned long currentMillis = millis();
     if (currentMillis - lastReconnectAttempt >= reconnectInterval)
     {
       Serial.println("WiFi disconnected, attempting reconnect...");
-      WiFi.disconnect();
-      wifiManager.autoConnect(ap_ssid);
-      lastReconnectAttempt = currentMillis;
+
+      // Try to reconnect to saved networks
+      if (connectToSavedNetworks())
+      {
+        Serial.println("Reconnected to saved network");
+        lastReconnectAttempt = currentMillis;
+      }
+      else
+      {
+        Serial.println("All saved networks failed, starting config portal...");
+        WiFi.disconnect();
+        wifiManager.autoConnect(ap_ssid);
+
+        // If a new network was configured, save it
+        if (WiFi.status() == WL_CONNECTED)
+        {
+          String newSSID = WiFi.SSID();
+          String newPassword = WiFi.psk();
+          if (newSSID.length() > 0)
+          {
+            addOrUpdateNetwork(newSSID.c_str(), newPassword.c_str());
+          }
+        }
+
+        lastReconnectAttempt = currentMillis;
+      }
     }
   }
 
@@ -997,6 +1161,18 @@ void loop()
     {
       lastNotifyTime = millis();
       notifyClients(getValues());
+    }
+
+    // Log data every 5 minutes
+    if (millis() - lastLogTime >= logInterval)
+    {
+      lastLogTime = millis();
+
+      logData(averagePositiveCurrent, averageNegativeCurrent,
+              peakPositiveCurrent, peakNegativeCurrent,
+              averagePositiveVoltage, averageNegativeVoltage,
+              peakPositiveVoltage, peakNegativeVoltage,
+              ForwardTimeInt, ReverseTimeInt);
     }
   }
 }
