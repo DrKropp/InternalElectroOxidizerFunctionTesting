@@ -21,10 +21,10 @@
 // ============================================================================
 
 extern WiFiManager wifiManager;
+extern WiFiManagerParameter custom_device_name;
 extern AsyncWebServer server;
 extern AsyncWebSocket ws;
 extern MultiResetDetector* mrd;
-extern WiFiManagerParameter custom_device_name;
 
 // ADC Handles
 extern adc_continuous_handle_t adc_handle;
@@ -76,6 +76,7 @@ extern uint32_t negative_adc_count;
 extern uint32_t reversestartTime;
 extern unsigned long lastNotifyTime;
 extern unsigned long lastReconnectAttempt;
+extern unsigned long currentReconnectInterval;
 extern unsigned long lastLogTime;
 extern unsigned long lastTimeSyncAttempt;
 extern unsigned long currentLogStartTime;
@@ -88,7 +89,7 @@ extern String currentLogFilename;
 // Peak Reset Management
 extern bool hasResetPeakCurrent;
 
-// ADC Buffers
-extern uint8_t adc_buffer[BUFFER_SIZE * sizeof(adc_digi_output_data_t)];
+// ADC Buffers (allocated on heap to prevent stack overflow)
+extern uint8_t* adc_buffer;
 
 #endif // GLOBALS_H

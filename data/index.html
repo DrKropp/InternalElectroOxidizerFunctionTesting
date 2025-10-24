@@ -48,26 +48,27 @@
         <div class="top-grid">
             <div class="display-data">
                 <!-- <p class="state">Peak Voltage: +<span id="peakPositiveVoltage">0</span> | -<span id="peakNegativeVoltage">0</span></p> -->
-                <p class="state">Avg. Positive Voltage: +<span id="averagePositiveVoltage">0</span></p>
-                <p class="state">Peak Positive Voltage: +<span id="peakPositiveVoltage">0</span></p>
-                <p class="state">Avg Negative Voltage: -<span id="averageNegativeVoltage">0</span></p>
-                <p class="state">Peak Negative Voltage: -<span id="peakNegativeVoltage">0</span></p>
+                <p class="state"><span class="label-text">Avg. Pos. Voltage:</span> +<span id="averagePositiveVoltage">0</span></p>
+                <p class="state"><span class="label-text">Peak Pos. Voltage:</span> +<span id="peakPositiveVoltage">0</span></p>
+                <p class="state"><span class="label-text">Avg. Neg. Voltage:</span> -<span id="averageNegativeVoltage">0</span></p>
+                <p class="state"><span class="label-text">Peak Neg. Voltage:</span> -<span id="peakNegativeVoltage">0</span></p>
                 <!-- <p class="state">Avg. Voltage: +<span id="averagePositiveVoltage">0</span> | -<span id="averageNegativeVoltage">0</span></p> -->
-                <p class="state">Avg. Positive Current: +<span id="averagePositiveCurrent">0</span></p>
-                <p class="state">Peak Positive Current: +<span id="peakPositiveCurrent">0</span></p>
-                <p class="state">Avg. Negative Current: <span id="averageNegativeCurrent">0</span></p>
-                <p class="state">Peak Negative Current: <span id="peakNegativeCurrent">0</span></p>         
+                <p class="state"><span class="label-text">Avg. Pos. Current:</span> +<span id="averagePositiveCurrent">0</span></p>
+                <p class="state"><span class="label-text">Peak Pos. Current:</span> +<span id="peakPositiveCurrent">0</span></p>
+                <p class="state"><span class="label-text">Avg. Neg. Current:</span> <span id="averageNegativeCurrent">0</span></p>
+                <p class="state"><span class="label-text">Peak Neg. Current:</span> <span id="peakNegativeCurrent">0</span></p>
             </div>
         </div>
-        <div class="bottom-grid">
-            <div class="bottom-card" id="state-card">
+        <div class="toggle-container">
+            <div class="toggle-card">
                 <h2>Device Output</h2>
-                <p class="state"><span id="state">ON</span></p>
-            </div>
-            <div class="bottom-card" id="toggle-card">
-                <h2>Device Output Control</h2>
-                <button id="on-button" class="button active">ON</button>
-                <button id="off-button" class="button">OFF</button>
+                <div class="state-indicator">
+                    <span class="status-dot" id="status-dot"></span>
+                    <span class="status-text" id="status-text">OFF</span>
+                </div>
+                <button id="toggle-button" class="button toggle-button">
+                    <span id="toggle-text">Turn ON</span>
+                </button>
             </div>
         </div>
         <div class="log-download-container">
@@ -75,7 +76,7 @@
                 <svg class="download-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
                 </svg>
-                Download Data Logs
+                <span class="button-text">Download Data Logs</span>
             </button>
             <p class="log-info">Downloads last 7 days of recorded data</p>
         </div>

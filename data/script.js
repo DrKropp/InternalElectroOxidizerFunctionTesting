@@ -76,29 +76,17 @@ function onMessage(event) {
     var myObj = JSON.parse(event.data);
     var keys = Object.keys(myObj);
 
-    // CRITICAL FIX: Handle isRunning state updates from server
+    // Handle isRunning state updates from server
     if (myObj.hasOwnProperty('isRunning')) {
         const serverIsRunning = myObj.isRunning;
-        
-        // Only update UI if state differs from current local state
-        if (serverIsRunning !== isArmed) {
-            isArmed = serverIsRunning;
-            
-            // Update UI to match server state
-            if (isArmed) {
-                document.getElementById('state').innerHTML = "ON";
-                document.querySelector('#state-card').style.backgroundColor = "green";
-                document.getElementById('on-button').classList.add('active');
-                document.getElementById('off-button').classList.remove('active');
-            } else {
-                document.getElementById('state').innerHTML = "OFF";
-                document.querySelector('#state-card').style.backgroundColor = "red";
-                document.getElementById('on-button').classList.remove('active');
-                document.getElementById('off-button').classList.add('active');
-            }
-            
-            console.log('Device state synchronized: ' + (isArmed ? 'ON' : 'OFF'));
-        }
+
+        // Update local state
+        isArmed = serverIsRunning;
+
+        // Update UI to match server state
+        updateToggleUI(isArmed);
+
+        console.log('Device state synchronized: ' + (isArmed ? 'ON' : 'OFF'));
     }
     
     for (var i = 0; i < keys.length; i++){
@@ -113,21 +101,23 @@ function onMessage(event) {
         } else {
             document.getElementById(key).innerHTML = myObj[key];
         }
+
+        // Debug log for voltage and timing value updates
+        if(key.includes("Value") || key.includes("Voltage")) {
+            console.log('Updated ' + key + ' to: ' + myObj[key]);
+        }
     }
 }
 
 function initButton() {
-    document.getElementById('off-button').addEventListener('click', toggleOff);
-    document.getElementById('on-button').addEventListener('click', toggleOn);
+    document.getElementById('toggle-button').addEventListener('click', toggleOutput);
     document.getElementById('update-button').addEventListener('click', handleUpdate);
     document.querySelector('.timing-toggle').addEventListener('click', function(e) {
         e.stopPropagation();
     });
 }
 
-function toggleOff() {
-    if(!isArmed) { return; }
-
+function toggleOutput() {
     // Ensure WebSocket is open before sending command
     if(websocket.readyState !== WebSocket.OPEN) {
         console.error('WebSocket not connected');
@@ -136,21 +126,38 @@ function toggleOff() {
 
     // Send toggle command - don't update UI yet, wait for server confirmation
     websocket.send('toggle');
-    console.log('Toggle OFF command sent');
+    console.log('Toggle command sent - current state: ' + (isArmed ? 'ON' : 'OFF'));
 }
 
-function toggleOn() {
-    if(isArmed) { return; }
+function updateToggleUI(state) {
+    const toggleButton = document.getElementById('toggle-button');
+    const toggleText = document.getElementById('toggle-text');
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
 
-    // Ensure WebSocket is open before sending command
-    if(websocket.readyState !== WebSocket.OPEN) {
-        console.error('WebSocket not connected');
+    // Ensure all elements exist before updating
+    if (!toggleButton || !toggleText || !statusDot || !statusText) {
+        console.error('Toggle UI elements not found');
         return;
     }
 
-    // Send toggle command - don't update UI yet, wait for server confirmation
-    websocket.send('toggle');
-    console.log('Toggle ON command sent');
+    if (state) {
+        // Device is ON
+        statusDot.style.backgroundColor = '#10b981'; // Green
+        statusText.textContent = 'ON';
+        toggleText.textContent = 'Turn OFF';
+        toggleButton.classList.add('button-on');
+        toggleButton.classList.remove('button-off');
+    } else {
+        // Device is OFF
+        statusDot.style.backgroundColor = '#ef4444'; // Red
+        statusText.textContent = 'OFF';
+        toggleText.textContent = 'Turn ON';
+        toggleButton.classList.add('button-off');
+        toggleButton.classList.remove('button-on');
+    }
+
+    console.log('Toggle UI updated - state: ' + (state ? 'ON' : 'OFF'));
 }
 
 

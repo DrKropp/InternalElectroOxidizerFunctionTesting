@@ -159,7 +159,11 @@ bool addOrUpdateNetwork(const char* ssid, const char* password)
       savedNetworks[existingIndex].password[63] = '\0';
     }
     savedNetworks[existingIndex].lastConnected = millis();
-    savedNetworks[existingIndex].priority++;
+    // Cap priority at 250 to prevent uint8_t overflow
+    if (savedNetworks[existingIndex].priority < 250)
+    {
+      savedNetworks[existingIndex].priority++;
+    }
     return saveSavedNetworks();
   }
 
@@ -283,7 +287,11 @@ bool connectToNetwork(WiFiCredential* network)
   {
     Serial.printf("Connected to: %s\n", network->ssid);
     network->lastConnected = millis();
-    network->priority++;
+    // Cap priority at 250 to prevent uint8_t overflow
+    if (network->priority < 250)
+    {
+      network->priority++;
+    }
     saveSavedNetworks();
     return true;
   }

@@ -56,25 +56,26 @@ const float ADC_SLOPE = 0.0192397497221598f;
 // TIMING CONSTANTS
 // ============================================================================
 
-const unsigned long notifyInterval = 500;        // WebSocket update interval (ms) - reduced from 100ms to prevent queue overflow
-const unsigned long reconnectInterval = 10000;   // WiFi reconnect interval (ms)
-const unsigned long logInterval = 300000;        // Data logging interval (ms) - 5 minutes
+constexpr unsigned long notifyInterval = 500;        // WebSocket update interval (ms) - reduced from 100ms to prevent queue overflow
+constexpr unsigned long reconnectInterval = 10000;   // WiFi reconnect interval (ms) - initial value
+constexpr unsigned long maxReconnectInterval = 300000; // Max WiFi reconnect interval (ms) - 5 minutes
+constexpr unsigned long logInterval = 300000;        // Data logging interval (ms) - 5 minutes
 
 // ============================================================================
 // LOGGING CONSTANTS
 // ============================================================================
 
 const uint8_t LOG_RETENTION_DAYS = 7;            // Keep logs for 7 days
-const char* LOG_DIR = "/logs";                   // Log directory path
-const char* LOG_FILE_PREFIX = "/logs/log_";      // Log file prefix (will be log_YYYYMMDD.csv)
-const char* DAY_COUNTER_FILE = "/day_counter.txt"; // Day counter persistence file
+constexpr const char* LOG_DIR = "/logs";                   // Log directory path
+constexpr const char* LOG_FILE_PREFIX = "/logs/log_";      // Log file prefix (will be log_YYYYMMDD.csv)
+constexpr const char* DAY_COUNTER_FILE = "/day_counter.txt"; // Day counter persistence file
 
 // ============================================================================
 // NTP TIME SYNCHRONIZATION CONSTANTS
 // ============================================================================
 
-const char* NTP_SERVER1 = "pool.ntp.org";        // Primary NTP server
-const char* NTP_SERVER2 = "time.nist.gov";       // Secondary NTP server
+constexpr const char* NTP_SERVER1 = "pool.ntp.org";        // Primary NTP server
+constexpr const char* NTP_SERVER2 = "time.nist.gov";       // Secondary NTP server
 const long GMT_OFFSET_SEC = 0;                   // UTC timezone (0 offset)
 const int DAYLIGHT_OFFSET_SEC = 0;               // No daylight saving
 const unsigned long NTP_SYNC_INTERVAL = 3600000; // Sync every 1 hour (ms)
